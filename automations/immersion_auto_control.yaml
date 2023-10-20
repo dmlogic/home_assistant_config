@@ -1,26 +1,27 @@
 alias: Immersion solar control
-description: Turn the immersion heater on or off depending on the amount of surplus
-  energy available
+description: >-
+  Turn the immersion heater on or off depending on the amount of surplus energy
+  available
 trigger:
-- platform: time_pattern
-  minutes: /2
+  - platform: time_pattern
+    minutes: /2
 condition: []
 action:
-- if:
-  - condition: state
-    entity_id: input_boolean.doors_armed
-    state: 'off'
-  - condition: state
-    state: 'on'
-    entity_id: binary_sensor.surplus_power
-  then:
-  - type: turn_on
-    device_id: 6956038b82a9cc216f8fa81309eaa6ca
-    entity_id: 268d9454a1cd8a25e48e930e20eb47c5
-    domain: switch
-  else:
-  - type: turn_off
-    device_id: 6956038b82a9cc216f8fa81309eaa6ca
-    entity_id: 268d9454a1cd8a25e48e930e20eb47c5
-    domain: switch
+  - if:
+      - condition: state
+        entity_id: input_boolean.doors_armed
+        state: "off"
+      - condition: state
+        state: "on"
+        entity_id: binary_sensor.surplus_power
+    then:
+      - type: turn_on
+        device_id: 27039aa29995acc00f5acaa3483ce65b
+        entity_id: 129d7d397fa8ec0a010a7086e6935ffe
+        domain: switch
+    else:
+      - type: turn_off
+        device_id: 27039aa29995acc00f5acaa3483ce65b
+        entity_id: 129d7d397fa8ec0a010a7086e6935ffe
+        domain: switch
 mode: restart
