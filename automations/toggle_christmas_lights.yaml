@@ -1,0 +1,16 @@
+alias: Toggle christmas lights
+description: ''
+trigger:
+- platform: state
+  entity_id: input_boolean.christmas_lights
+condition: []
+action:
+- type: toggle
+  device_id: 545e43950b7d8f0436dcd8ef73590ad6
+  entity_id: switch.plug_socket_1
+  domain: switch
+- type: toggle
+  device_id: b61bb89d403431239b8919db41054f96
+  entity_id: switch.plug_socket_2_2
+  domain: switch
+mode: single

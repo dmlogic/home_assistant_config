@@ -1,0 +1,8 @@
+# Reverse proxy for remote access with DuckDNS
+# We don't actually ssl as it prevents non-ssl access
+# @see https://help.konnected.io/support/solutions/articles/32000023964-set-up-home-assistant-with-secure-remote-access-using-duckdns-and-nginx-proxy
+#  ssl_certificate: /ssl/fullchain.pem
+#  ssl_key: /ssl/privkey.pem
+use_x_forwarded_for: true
+trusted_proxies:
+  - 172.30.33.0/24

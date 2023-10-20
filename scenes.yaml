@@ -1,0 +1,149 @@
+- id: '1669978753888'
+  name: All lights off
+  entities:
+    light.dining_room:
+      supported_color_modes:
+      - brightness
+      friendly_name: Dining room
+      supported_features: 32
+      state: 'off'
+    light.stairs_and_landing_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Stairs and Landing
+      supported_features: 32
+      state: 'off'
+    light.spare_bedroom_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Spare bedroom
+      supported_features: 32
+      state: 'off'
+    light.patio_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Patio
+      supported_features: 32
+      state: 'off'
+    light.lounge:
+      supported_color_modes:
+      - brightness
+      friendly_name: Lounge
+      supported_features: 32
+      state: 'off'
+    light.hallway_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Hallway
+      supported_features: 32
+      state: 'off'
+    light.garden_room:
+      supported_color_modes:
+      - brightness
+      friendly_name: Garden room
+      supported_features: 32
+      state: 'off'
+    light.front_of_house_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Front of house
+      supported_features: 32
+      state: 'off'
+    light.dressing_room:
+      supported_color_modes:
+      - brightness
+      friendly_name: Dressing room
+      supported_features: 32
+      state: 'off'
+    light.down_room_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Down room
+      supported_features: 32
+      state: 'off'
+    switch.porch:
+      icon: mdi:lightbulb
+      friendly_name: Porch
+      state: 'off'
+  icon: mdi:lightbulb-multiple-off
+  metadata:
+    light.dining_room:
+      entity_only: true
+    light.stairs_and_landing_2:
+      entity_only: true
+    light.spare_bedroom_2:
+      entity_only: true
+    light.patio_2:
+      entity_only: true
+    light.lounge:
+      entity_only: true
+    light.hallway_2:
+      entity_only: true
+    light.garden_room:
+      entity_only: true
+    light.front_of_house_2:
+      entity_only: true
+    light.dressing_room:
+      entity_only: true
+    light.down_room_2:
+      entity_only: true
+    switch.porch:
+      entity_only: true
+- id: '1669979122393'
+  name: Lights for guests arriving
+  entities:
+    light.front_of_house_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Front of house
+      supported_features: 32
+      color_mode: brightness
+      brightness: 255
+      state: 'on'
+    switch.porch:
+      icon: mdi:lightbulb
+      friendly_name: Porch
+      state: 'on'
+    light.hallway_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Hallway
+      supported_features: 32
+      color_mode: brightness
+      brightness: 209
+      state: 'on'
+  icon: mdi:lightbulb-multiple
+  metadata:
+    light.front_of_house_2:
+      entity_only: true
+    switch.porch:
+      entity_only: true
+    light.hallway_2:
+      entity_only: true
+- id: '1669979365459'
+  name: Outside lights off
+  entities:
+    switch.porch:
+      icon: mdi:lightbulb
+      friendly_name: Porch
+      state: 'off'
+    light.front_of_house_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Front of house
+      supported_features: 32
+      state: 'off'
+    light.patio_2:
+      supported_color_modes:
+      - brightness
+      friendly_name: Patio
+      supported_features: 32
+      state: 'off'
+  metadata:
+    switch.porch:
+      entity_only: true
+    light.front_of_house_2:
+      entity_only: true
+    light.patio_2:
+      entity_only: true
+  icon: mdi:lightbulb-multiple-off

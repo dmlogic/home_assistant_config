@@ -1,0 +1,26 @@
+name: Outside lights off
+entities:
+  switch.porch:
+    icon: mdi:lightbulb
+    friendly_name: Porch
+    state: 'off'
+  light.front_of_house_2:
+    supported_color_modes:
+    - brightness
+    friendly_name: Front of house
+    supported_features: 32
+    state: 'off'
+  light.patio_2:
+    supported_color_modes:
+    - brightness
+    friendly_name: Patio
+    supported_features: 32
+    state: 'off'
+metadata:
+  switch.porch:
+    entity_only: true
+  light.front_of_house_2:
+    entity_only: true
+  light.patio_2:
+    entity_only: true
+icon: mdi:lightbulb-multiple-off

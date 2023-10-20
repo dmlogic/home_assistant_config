@@ -1,0 +1,32 @@
+- binary_sensor:
+    # Here we want to establish if energy being exported to the grid is sufficient
+    # to power the immersion water heater. This is complicated by the fact that
+    # the switch I'm using does not report power consumption, so all we can do
+    # is assume it is using it's max power if it's turned on. It's probably not
+    # as the thermostat will click off, but it should still behave as expected.
+    # the return value is "yes" or "no" which can be picked up by an automation
+    - name: "Surplus power"
+      state: >
+        {# This is the amount of power the heater uses in kW #}
+        {% set heater_power = 3000 %}
+
+        {# This is the amount of power exporting #}
+        {% set export_power = max([states('sensor.solaredge_m1_ac_power') | float(0), 0]) %}
+
+        {# If we're not exporting at all, it's an immediate no #}
+        {% if export_power <= 0 %}
+        off
+        {% else %}
+
+          {# If the heater is on, add it's max usage to the export #}
+          {% if states("switch.shelly_immersion") == "on" %}
+              {% set export_power = export_power + heater_power %}
+          {% endif %}
+
+          {# A value of below zero indicates surplus power #}
+          {%if export_power > heater_power %}
+          on
+          {% else %}
+          off
+          {% endif %}
+        {% endif %}

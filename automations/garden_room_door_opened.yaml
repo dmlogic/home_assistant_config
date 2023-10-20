@@ -1,0 +1,21 @@
+alias: Garden room doors opened
+description: Sensor triggered whilst doors armed
+trigger:
+- platform: state
+  entity_id: binary_sensor.garden_room_doors_window_door_is_open
+  from: 'off'
+  to: 'on'
+condition:
+- condition: state
+  entity_id: input_boolean.doors_armed
+  state: 'on'
+  for:
+    hours: 0
+    minutes: 0
+    seconds: 10
+action:
+- service: notify.mobile_app_sm_g981b
+  data:
+    message: Garden room doors opened
+    title: Security alert
+mode: single

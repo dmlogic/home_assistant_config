@@ -1,0 +1,30 @@
+name: Lights for guests arriving
+entities:
+  light.front_of_house_2:
+    supported_color_modes:
+      - brightness
+    friendly_name: Front of house
+    supported_features: 32
+    color_mode: brightness
+    brightness: 255
+    state: "on"
+  switch.porch:
+    icon: mdi:lightbulb
+    friendly_name: Porch
+    state: "on"
+  light.hallway_2:
+    supported_color_modes:
+      - brightness
+    friendly_name: Hallway
+    supported_features: 32
+    color_mode: brightness
+    brightness: 209
+    state: "on"
+icon: mdi:lightbulb-multiple
+metadata:
+  light.front_of_house_2:
+    entity_only: true
+  switch.porch:
+    entity_only: true
+  light.hallway_2:
+    entity_only: true

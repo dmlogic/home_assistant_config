@@ -1,0 +1,3 @@
+# Honeywell heating and hot water
+username: !secret evohome_username
+password: !secret evohome_password

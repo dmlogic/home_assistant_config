@@ -1,0 +1,25 @@
+alias: Front door opened
+description: Sensor triggered whilst doors armed
+trigger:
+  platform: state
+  entity_id: binary_sensor.front_door_sensor_sensor_state_any_2
+  from: 'off'
+  to: 'on'
+  for:
+    hours: 0
+    minutes: 0
+    seconds: 0
+condition:
+- condition: state
+  entity_id: input_boolean.doors_armed
+  state: 'on'
+  for:
+    hours: 0
+    minutes: 0
+    seconds: 10
+action:
+- service: notify.mobile_app_sm_g981b
+  data:
+    message: Front door opened
+    title: Security alert
+mode: single

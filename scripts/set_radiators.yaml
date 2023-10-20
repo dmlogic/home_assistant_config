@@ -1,0 +1,69 @@
+set_radiators:
+  alias: Adjust all radiators
+  mode: restart
+  icon: mdi:radiator
+  sequence:
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.hall
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    # - service: evohome.set_zone_override
+    #   data:
+    #     entity_id: climate.kitchen
+    #     setpoint: "{{ states('input_number.target_temperature')  | float }}"
+    #     duration:
+    #       hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.play_room
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.laundry
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.lounge
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.garden_room
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.florence_bed
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.spare_bed
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.office
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.master_bed
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: system_log.write
+      data:
+        message: All rads set to "{{ states('input_number.target_temperature') }}" for "{{ states('input_number.target_temperature')  | float }}" hours
+        level: warning
