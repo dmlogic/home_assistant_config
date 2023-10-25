@@ -1,0 +1,8 @@
+customize_glob:                                                               
+  sensor.energy_solar_generation:                                             
+    device_class: energy                                                      
+    state_class: total_increasing                                             
+  sensor.energy_battery_charged:                                              
+    device_class: energy                                                      
+  sensor.energy_battery_discharged:                                           
+    device_class: energy

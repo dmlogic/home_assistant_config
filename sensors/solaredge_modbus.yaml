@@ -1,0 +1,66 @@
+- platform: template
+  sensors:
+    power_battery_charging:
+      friendly_name: "Power - Battery Charging"
+      unit_of_measurement: "W"
+      value_template: "{{ max([states('sensor.solaredge_battery1_power') | float(0), 0]) | abs() }}"
+    power_battery_discharging:
+      friendly_name: "Power - Battery Discharging"
+      unit_of_measurement: "W"
+      value_template: "{{ min([states('sensor.solaredge_battery1_power') | float(0), 0]) | abs() }}"
+    power_battery_charging_ac:
+      friendly_name: "Power - Battery Charging from AC"
+      unit_of_measurement: "W"
+      value_template: "{{ min([states('sensor.solaredge_ac_power') | float(0), 0]) | abs() }}"
+    power_battery_charging_solar:
+      friendly_name: "Power - Battery Charging from Solar"
+      unit_of_measurement: "W"
+      value_template: "{{ (states('sensor.power_battery_charging') | float(0)) - (states('sensor.power_battery_charging_ac') | float(0)) }}"
+
+    power_grid_import:
+      friendly_name: "Power - Grid Import"
+      unit_of_measurement: "W"
+      value_template: "{{ (min([states('sensor.solaredge_m1_ac_power') | float(0), 0]) | abs()) - (states('sensor.power_battery_charging_ac') | float(0)) }}"
+    power_grid_export:
+      friendly_name: "Power - Grid Export"
+      unit_of_measurement: "W"
+      value_template: "{{ max([states('sensor.solaredge_m1_ac_power') | float(0), 0]) | abs() }}"
+
+    power_solar_generation:
+      friendly_name: "Power - Solar Generation"
+      unit_of_measurement: "W"
+      value_template: "{{ max([states('sensor.solaredge_ac_power') | float(0), 0]) + (states('sensor.power_battery_charging_solar') | float(0)) - (states('sensor.power_battery_discharging') | float(0)) }}"
+
+    power_consumption:
+      friendly_name: "Power - Consumption"
+      unit_of_measurement: "W"
+      value_template: "{{ max([states('sensor.solaredge_ac_power') | float(0), 0]) - states('sensor.solaredge_m1_ac_power') | float(0) }}"
+    power_self_consumption:
+      friendly_name: "Power - Self Consumption"
+      unit_of_measurement: "W"
+      value_template: "{{ max([states('sensor.solaredge_ac_power') | float(0), 0]) - (states('sensor.power_battery_discharging') | float(0)) - states('sensor.power_grid_export') | float(0) }}"
+
+    energy_solar_generation:
+      friendly_name: "Energy - Solar Generation"
+      unit_of_measurement: "kWh"
+      value_template: "{{ (states('sensor.solaredge_ac_energy_kwh') | float(0)) - (states('sensor.energy_battery_discharged') | float(0)) + (states('sensor.energy_battery_charged_solar') | float(0)) }}"
+      availability_template: "{{ states('sensor.solaredge_ac_energy_kwh') not in ['unknown', 'unavailable'] }}"
+
+- platform: integration
+  # Integrate the battery charging power flow to get energy
+  name: energy_battery_charged
+  source: sensor.power_battery_charging
+  method: left
+  unit_prefix: k
+- platform: integration
+  # Integrate the battery charging from solar power flow to get energy
+  name: energy_battery_charged_solar
+  source: sensor.power_battery_charging_solar
+  method: left
+  unit_prefix: k
+- platform: integration
+  # Integrate the battery discharging power flow to get energy
+  name: energy_battery_discharged
+  source: sensor.power_battery_discharging
+  method: left
+  unit_prefix: k
