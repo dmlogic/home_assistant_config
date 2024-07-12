@@ -14,7 +14,7 @@ condition:
     minutes: 0
     seconds: 10
 action:
-- service: notify.mobile_app_sm_g981b
+- service: notify.mobile_app_sm_s921b
   data:
     message: Garden room doors opened
     title: Security alert
