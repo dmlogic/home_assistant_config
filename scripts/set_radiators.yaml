@@ -9,12 +9,12 @@ set_radiators:
         setpoint: "{{ states('input_number.target_temperature')  | float }}"
         duration:
           hours: "{{ states('input_number.target_temperature_duration') | int }}"
-    # - service: evohome.set_zone_override
-    #   data:
-    #     entity_id: climate.kitchen
-    #     setpoint: "{{ states('input_number.target_temperature')  | float }}"
-    #     duration:
-    #       hours: "{{ states('input_number.target_temperature_duration') | int }}"
+    - service: evohome.set_zone_override
+      data:
+        entity_id: climate.kitchen
+        setpoint: "{{ states('input_number.target_temperature')  | float }}"
+        duration:
+          hours: "{{ states('input_number.target_temperature_duration') | int }}"
     - service: evohome.set_zone_override
       data:
         entity_id: climate.play_room
@@ -35,7 +35,8 @@ set_radiators:
           hours: "{{ states('input_number.target_temperature_duration') | int }}"
     - service: evohome.set_zone_override
       data:
-        entity_id: climate.garden_room
+        # This is the garden room
+        entity_id: climate.new
         setpoint: "{{ states('input_number.target_temperature')  | float }}"
         duration:
           hours: "{{ states('input_number.target_temperature_duration') | int }}"
