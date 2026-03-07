@@ -6,3 +6,4 @@
 use_x_forwarded_for: true
 trusted_proxies:
   - 172.30.33.0/24
+server_port: 8123 # Use your chosen port
