@@ -1,3 +1,4 @@
 secrets.yaml
 home-assistant*
 custom_components/solaredge_modbus
+SESSION_NOTES.md
