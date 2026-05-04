@@ -2,7 +2,7 @@ alias: Lounge doors opened
 description: Sensor triggered whilst doors armed
 trigger:
   - platform: state
-    entity_id: binary_sensor.lounge_doors_window_door_is_open
+    entity_id: binary_sensor.lounge_doors_open
     from: "off"
     to: "on"
 condition:
