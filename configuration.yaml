@@ -16,7 +16,6 @@ input_boolean:
     icon: mdi:sprinkler-variant
 
 evohome: !include evohome.yaml
-http: !include http.yaml
 
 # Text to speech
 tts:

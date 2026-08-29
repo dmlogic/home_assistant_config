@@ -1,0 +1,39 @@
+alias: Irrigation valves daily schedule
+description: Run irrigation zones 1 and 2 together according to the irrigation schedule
+trigger:
+  - platform: state
+    entity_id: schedule.irrigation
+  - platform: homeassistant
+    event: start
+  - platform: state
+    entity_id: input_boolean.irrigation_enabled
+  - platform: state
+    entity_id:
+      - switch.outside_irrigation_valves_irrigation_zone_1
+      - switch.outside_irrigation_valves_irrigation_zone_2
+    from: unavailable
+  - platform: state
+    entity_id:
+      - switch.outside_irrigation_valves_irrigation_zone_1
+      - switch.outside_irrigation_valves_irrigation_zone_2
+    from: unknown
+condition: []
+action:
+  - if:
+      - condition: template
+        value_template: >-
+          {{ is_state('input_boolean.irrigation_enabled', 'on')
+             and is_state('schedule.irrigation', 'on') }}
+    then:
+      - service: switch.turn_on
+        target:
+          entity_id:
+            - switch.outside_irrigation_valves_irrigation_zone_1
+            - switch.outside_irrigation_valves_irrigation_zone_2
+    else:
+      - service: switch.turn_off
+        target:
+          entity_id:
+            - switch.outside_irrigation_valves_irrigation_zone_1
+            - switch.outside_irrigation_valves_irrigation_zone_2
+mode: restart
