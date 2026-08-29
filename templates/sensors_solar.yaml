@@ -1,4 +1,53 @@
 - sensor:
+  - name: "SolarEdge AC Power"
+    unique_id: solaredge_compat_ac_power
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: "W"
+    state: "{{ states('sensor.solaredge_multi_i1_ac_power') }}"
+    availability: "{{ has_value('sensor.solaredge_multi_i1_ac_power') }}"
+  - name: "SolarEdge AC Energy kWh"
+    unique_id: solaredge_compat_ac_energy_kwh
+    device_class: energy
+    state_class: total_increasing
+    unit_of_measurement: "kWh"
+    state: "{{ states('sensor.solaredge_multi_i1_ac_energy') }}"
+    availability: "{{ has_value('sensor.solaredge_multi_i1_ac_energy') }}"
+  - name: "SolarEdge M1 AC Power"
+    unique_id: solaredge_compat_m1_ac_power
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: "W"
+    state: "{{ states('sensor.solaredge_multi_i1_m1_ac_power') }}"
+    availability: "{{ has_value('sensor.solaredge_multi_i1_m1_ac_power') }}"
+  - name: "SolarEdge M1 Imported kWh"
+    unique_id: solaredge_compat_m1_imported_kwh
+    device_class: energy
+    state_class: total_increasing
+    unit_of_measurement: "kWh"
+    state: "{{ states('sensor.solaredge_multi_i1_m1_ac_energy_imported') }}"
+    availability: "{{ has_value('sensor.solaredge_multi_i1_m1_ac_energy_imported') }}"
+  - name: "SolarEdge M1 Exported kWh"
+    unique_id: solaredge_compat_m1_exported_kwh
+    device_class: energy
+    state_class: total_increasing
+    unit_of_measurement: "kWh"
+    state: "{{ states('sensor.solaredge_multi_i1_m1_ac_energy_exported') }}"
+    availability: "{{ has_value('sensor.solaredge_multi_i1_m1_ac_energy_exported') }}"
+  - name: "SolarEdge Battery1 Power"
+    unique_id: solaredge_compat_battery1_power
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: "W"
+    state: "{{ states('sensor.solaredge_multi_i1_b1_dc_power') }}"
+    availability: "{{ has_value('sensor.solaredge_multi_i1_b1_dc_power') }}"
+  - name: "SolarEdge Battery1 State of Charge"
+    unique_id: solaredge_compat_battery1_state_of_charge
+    device_class: battery
+    state_class: measurement
+    unit_of_measurement: "%"
+    state: "{{ states('sensor.solaredge_multi_i1_b1_state_of_energy') }}"
+    availability: "{{ has_value('sensor.solaredge_multi_i1_b1_state_of_energy') }}"
   - name: "Power - Battery Charging"
     unit_of_measurement: "W"
     state: "{{ max([states('sensor.solaredge_battery1_power') | float(0), 0]) | abs() }}"

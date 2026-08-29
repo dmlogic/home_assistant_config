@@ -18,7 +18,7 @@
         {% else %}
 
           {# If the heater is on, add it's current usage to the export #}
-          {% if states("switch.shelly_immersion") == "on" %}
+          {% if states("switch.immersion_plus1m_switch_0") == "on" %}
               {% set switch_power = states('sensor.immersion_plus1m_switch_0_power') | float(0) %}
               {% set export_power = export_power + switch_power %}
           {% endif %}
