@@ -10,6 +10,11 @@ automation: !include_dir_list automations/
 script: !include_dir_list scripts/
 scene: !include_dir_list scenes/
 
+input_boolean:
+  irrigation_enabled:
+    name: Irrigation enabled
+    icon: mdi:sprinkler-variant
+
 evohome: !include evohome.yaml
 http: !include http.yaml
 
