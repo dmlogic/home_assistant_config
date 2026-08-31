@@ -5,6 +5,8 @@ description: >-
 trigger:
   - platform: time_pattern
     minutes: /2
+  - platform: state
+    entity_id: sensor.tesla_model_3_charging
 condition: []
 action:
   - if:
@@ -14,6 +16,11 @@ action:
       - condition: state
         state: "on"
         entity_id: binary_sensor.surplus_power
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: sensor.tesla_model_3_charging
+            state: charging
     then:
       - type: turn_on
         device_id: 27039aa29995acc00f5acaa3483ce65b

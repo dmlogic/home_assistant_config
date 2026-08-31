@@ -16,3 +16,11 @@
   source: sensor.power_battery_discharging
   method: left
   unit_prefix: k
+- platform: statistics
+  name: EV Grid Export 10 Minute Average
+  unique_id: ev_grid_export_10_minute_average
+  entity_id: sensor.power_grid_export
+  state_characteristic: mean
+  sampling_size: 120
+  max_age:
+    minutes: 10

@@ -1,0 +1,21 @@
+- binary_sensor:
+    - name: EV Off Peak Charging Window
+      unique_id: ev_off_peak_charging_window
+      state: >
+        {{ is_state('binary_sensor.octopus_energy_electricity_23e5077367_2000016805578_off_peak', 'on')
+           or is_state('binary_sensor.octopus_energy_00000000_0002_4000_8020_0000000bb802_intelligent_dispatching', 'on') }}
+      availability: >
+        {{ has_value('binary_sensor.octopus_energy_electricity_23e5077367_2000016805578_off_peak')
+           and has_value('binary_sensor.octopus_energy_00000000_0002_4000_8020_0000000bb802_intelligent_dispatching') }}
+
+- sensor:
+  - name: EV Available Solar Power
+    unique_id: ev_available_solar_power
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: W
+    state: >
+      {% set export = states('sensor.ev_grid_export_10_minute_average') | float(0) %}
+      {% set tesla_power = states('sensor.tesla_model_3_charger_power') | float(0) * 1000 %}
+      {{ [export + tesla_power - 250, 0] | max | round(0) }}
+    availability: "{{ has_value('sensor.ev_grid_export_10_minute_average') }}"

@@ -1,0 +1,29 @@
+alias: EV charging controller
+description: Reconcile Tesla charging with Octopus Intelligent and SolarEdge.
+triggers:
+  - trigger: state
+    entity_id: sensor.tesla_model_3_charging
+    id: tesla_state
+  - trigger: state
+    entity_id:
+      - input_boolean.ev_charge_override
+      - switch.octopus_energy_00000000_0002_4000_8020_0000000bb802_intelligent_smart_charge
+      - binary_sensor.octopus_energy_00000000_0002_4000_8020_0000000bb802_intelligent_dispatching
+      - binary_sensor.octopus_energy_electricity_23e5077367_2000016805578_off_peak
+      - binary_sensor.scheduled_charging_pending
+      - sensor.solaredge_battery1_state_of_charge
+      - select.solaredge_multi_i1_storage_control_mode
+      - sensor.tesla_model_3_battery_level
+      - number.tesla_model_3_charge_limit
+    id: state_change
+  - trigger: time_pattern
+    minutes: /10
+    id: solar_tick
+  - trigger: homeassistant
+    event: start
+    id: startup
+actions:
+  - service: script.ev_charge_reconcile
+    data:
+      solar_update: "{{ trigger.id in ['tesla_state', 'solar_tick', 'startup'] }}"
+mode: restart

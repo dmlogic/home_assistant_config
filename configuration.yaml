@@ -14,6 +14,9 @@ input_boolean:
   irrigation_enabled:
     name: Irrigation enabled
     icon: mdi:sprinkler-variant
+  ev_charge_override:
+    name: Charge override
+    icon: mdi:car-electric
 
 evohome: !include evohome.yaml
 
