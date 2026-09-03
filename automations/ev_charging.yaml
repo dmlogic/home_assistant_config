@@ -6,6 +6,7 @@ triggers:
     id: tesla_state
   - trigger: state
     entity_id:
+      - device_tracker.tesla_model_3_location
       - input_boolean.ev_charge_override
       - switch.octopus_energy_00000000_0002_4000_8020_0000000bb802_intelligent_smart_charge
       - binary_sensor.octopus_energy_00000000_0002_4000_8020_0000000bb802_intelligent_dispatching

@@ -10,6 +10,10 @@ solar power.
 There is no global automation enable switch. The current Tesla, Octopus,
 schedule, and Charge override states determine controller behavior.
 
+All Tesla, Octopus, and SolarEdge controller actions require
+`device_tracker.tesla_model_3_location` to be `home`. Charging elsewhere never
+changes Tesla charging, Octopus Boost, or SolarEdge battery settings.
+
 ## Dashboard controls
 
 The normal controls are:
@@ -41,6 +45,9 @@ and solar matching:
   configured charge limit.
 
 The controller never changes the Tesla charge limit.
+
+When Charge override is on while the Tesla is away, it has no effect. It remains
+on and takes effect only when the Tesla returns home.
 
 ## Charging rules
 
@@ -95,19 +102,25 @@ During peak-hour charging, the controller also leaves SolarEdge storage policy
 unchanged when `Time of Use` is selected. Off-peak charging always sets a 50%
 reserve, including when Time of Use is selected.
 
+When the Tesla leaves home, the controller sends no Tesla or Octopus commands.
+It restores SolarEdge backup reserve to 0% as local cleanup, unless SolarEdge
+storage control mode is `Time of Use`.
+
 ## Control precedence
 
 Each controller run applies the first matching state:
 
-1. Charge override: immediate 32 A charging; use Octopus Boost when Smart
+1. Tesla away from home: make no Tesla or Octopus changes; restore SolarEdge
+   reserve to 0% unless it is in Time of Use mode.
+2. Charge override: immediate 32 A charging; use Octopus Boost when Smart
    Charge is enabled.
-2. Tesla scheduled charging: leave start and stop timing to Tesla.
-3. Smart Charge while Tesla is not charging: leave start timing to Octopus.
-4. Tesla charging in off-peak or Intelligent dispatch: 32 A and 50% reserve.
-5. Tesla charging in peak hours: apply the 16 A and solar-matching rules.
-6. Tesla plugged in, not scheduled, and Smart Charge off: start Tesla according
+3. Tesla scheduled charging: leave start and stop timing to Tesla.
+4. Smart Charge while Tesla is not charging: leave start timing to Octopus.
+5. Tesla charging in off-peak or Intelligent dispatch: 32 A and 50% reserve.
+6. Tesla charging in peak hours: apply the 16 A and solar-matching rules.
+7. Tesla plugged in, not scheduled, and Smart Charge off: start Tesla according
    to the applicable off-peak or peak-hour rule.
-7. Tesla unplugged or not charging: restore the reserve to 0%, unless SolarEdge
+8. Tesla unplugged or not charging: restore the reserve to 0%, unless SolarEdge
    is in Time of Use mode.
 
 ## Components
@@ -127,6 +140,7 @@ The controller is implemented by:
 - Tesla current: `number.tesla_model_3_charge_current`
 - Tesla charge limit: `number.tesla_model_3_charge_limit`
 - Tesla charging power: `sensor.tesla_model_3_charger_power`
+- Tesla location: `device_tracker.tesla_model_3_location`
 - Tesla schedule status: `binary_sensor.scheduled_charging_pending`
 - SolarEdge battery state of charge: `sensor.solaredge_battery1_state_of_charge`
 - SolarEdge grid export: `sensor.power_grid_export`
