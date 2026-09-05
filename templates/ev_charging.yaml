@@ -9,13 +9,28 @@
            and has_value('binary_sensor.octopus_energy_00000000_0002_4000_8020_0000000bb802_intelligent_dispatching') }}
 
 - sensor:
+  - name: EV Solar Headroom
+    unique_id: ev_solar_headroom
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: W
+    state: >
+      {% set export = states('sensor.power_grid_export') | float(0) %}
+      {% set import = states('sensor.power_grid_import') | float(0) %}
+      {% set battery_discharge = states('sensor.power_battery_discharging') | float(0) %}
+      {% set tesla_power = states('sensor.tesla_model_3_charger_power') | float(0) * 1000 %}
+      {{ [export - import + tesla_power - battery_discharge - 250, 0] | max | round(0) }}
+    availability: >
+      {{ has_value('sensor.power_grid_export')
+         and has_value('sensor.power_grid_import')
+         and has_value('sensor.power_battery_discharging')
+         and has_value('sensor.tesla_model_3_charger_power') }}
+
   - name: EV Available Solar Power
     unique_id: ev_available_solar_power
     device_class: power
     state_class: measurement
     unit_of_measurement: W
     state: >
-      {% set export = states('sensor.ev_grid_export_10_minute_average') | float(0) %}
-      {% set tesla_power = states('sensor.tesla_model_3_charger_power') | float(0) * 1000 %}
-      {{ [export + tesla_power - 250, 0] | max | round(0) }}
-    availability: "{{ has_value('sensor.ev_grid_export_10_minute_average') }}"
+      {{ states('sensor.ev_solar_headroom_10_minute_average') | float(0) | round(0) }}
+    availability: "{{ has_value('sensor.ev_solar_headroom_10_minute_average') }}"

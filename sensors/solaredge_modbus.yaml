@@ -17,9 +17,9 @@
   method: left
   unit_prefix: k
 - platform: statistics
-  name: EV Grid Export 10 Minute Average
-  unique_id: ev_grid_export_10_minute_average
-  entity_id: sensor.power_grid_export
+  name: EV Solar Headroom 10 Minute Average
+  unique_id: ev_solar_headroom_10_minute_average
+  entity_id: sensor.ev_solar_headroom
   state_characteristic: mean
   sampling_size: 120
   max_age:

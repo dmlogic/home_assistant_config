@@ -20,6 +20,15 @@ ev_charge_reconcile:
         battery_soc: "{{ states('sensor.solaredge_battery1_state_of_charge') | float(-1) }}"
         current_amps: "{{ states('number.tesla_model_3_charge_current') | float(-1) }}"
         available_solar: "{{ states('sensor.ev_available_solar_power') | float(-1) }}"
+        instantaneous_solar: "{{ states('sensor.ev_solar_headroom') | float(-1) }}"
+        solar_power: >
+          {% if available_solar >= 0 and instantaneous_solar >= 0 %}
+            {{ [available_solar, instantaneous_solar] | min }}
+          {% elif instantaneous_solar >= 0 %}
+            {{ instantaneous_solar }}
+          {% else %}
+            {{ available_solar }}
+          {% endif %}
         backup_reserve: "{{ states('number.solaredge_multi_i1_backup_reserve') | float(-1) }}"
         battery_level: "{{ states('sensor.tesla_model_3_battery_level') | float(-1) }}"
         charge_limit: "{{ states('number.tesla_model_3_charge_limit') | float(-1) }}"
@@ -138,10 +147,10 @@ ev_charge_reconcile:
                             entity_id: number.tesla_model_3_charge_current
                           data:
                             value: 16
-                - conditions: "{{ solar_update and available_solar >= 0 }}"
+                - conditions: "{{ solar_update and solar_power >= 0 }}"
                   sequence:
                     - variables:
-                        solar_amps: "{{ (available_solar / 230) | int(0) }}"
+                        solar_amps: "{{ (solar_power / 230) | int(0) }}"
                     - choose:
                         - conditions: "{{ solar_amps < 5 }}"
                           sequence:
@@ -186,10 +195,10 @@ ev_charge_reconcile:
               target:
                 entity_id: switch.tesla_model_3_charge
 
-        - conditions: "{{ battery_available and solar_update and available_solar >= 0 }}"
+        - conditions: "{{ battery_available and solar_update and solar_power >= 0 }}"
           sequence:
             - variables:
-                solar_amps: "{{ (available_solar / 230) | int(0) }}"
+                solar_amps: "{{ (solar_power / 230) | int(0) }}"
             - choose:
                 - conditions: "{{ solar_amps >= 5 }}"
                   sequence:

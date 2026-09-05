@@ -84,10 +84,18 @@ daytime rules:
 - Below Tesla's 5 A minimum available capacity, the controller stops charging
   to avoid unintended import or home-battery discharge.
 
-Available solar power is the ten-minute average of grid export plus the Tesla's
-current charging power, less a 250 W safety margin. Adding current Tesla draw
-back to export prevents the calculation falling to zero after Tesla begins
-using surplus generation.
+Solar headroom is calculated for every sample as net grid export, plus current
+Tesla charging power, minus home-battery discharge and a 250 W safety margin.
+Grid import and battery discharge are subtracted, so neither can be treated as
+solar capacity. The controller uses the ten-minute average of that headroom and
+the lower of that average and the current headroom. Adding Tesla draw back to
+net export prevents the calculation falling to zero after Tesla begins using
+surplus generation.
+
+After a Home Assistant restart, before the average is available, low-battery
+solar matching uses the current solar-headroom value as a safety fallback. This
+allows the controller to reduce or stop charging immediately rather than wait
+ten minutes while the home battery is low.
 
 ## Home battery rules
 
@@ -129,7 +137,8 @@ The controller is implemented by:
 
 - Automation: `automation.ev_charging_controller`
 - Reconciliation script: `script.ev_charge_reconcile`
-- 10-minute export average: `sensor.ev_grid_export_10_minute_average`
+- Instantaneous solar headroom: `sensor.ev_solar_headroom`
+- 10-minute solar headroom average: `sensor.ev_solar_headroom_10_minute_average`
 - Available solar calculation: `sensor.ev_available_solar_power`
 - Off-peak window: `binary_sensor.ev_off_peak_charging_window`
 
@@ -151,8 +160,8 @@ The controller is implemented by:
 
 Use these entities to check controller behavior:
 
-- `sensor.ev_grid_export_10_minute_average` should populate after enough grid
-  export samples have been collected following a restart.
+- `sensor.ev_solar_headroom_10_minute_average` should populate after enough
+  solar-headroom samples have been collected following a restart.
 - `sensor.ev_available_solar_power` shows the power used for low-battery solar
   matching.
 - `binary_sensor.ev_off_peak_charging_window` identifies 32 A / 50% reserve
