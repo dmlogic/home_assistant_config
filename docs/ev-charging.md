@@ -27,9 +27,9 @@ on the dashboard except as a fallback or diagnostic control.
 ### Octopus Smart Charge
 
 When Smart Charge is on, Octopus controls normal charging start and stop times.
-The controller still sets the Tesla current to 32 A and preserves 50% SolarEdge
-battery reserve while the Tesla is charging in an Octopus dispatch or an
-off-peak window.
+The controller still sets the Tesla current to 32 A and preserves the SolarEdge
+battery's starting state of charge while the Tesla is charging in an Octopus
+dispatch or an off-peak window.
 
 When Smart Charge is off, a plugged-in Tesla without a pending Tesla charging
 schedule is started by the controller and follows the peak-hour rules below.
@@ -70,7 +70,7 @@ Off-peak charging applies when either of these is on:
 While the Tesla is charging in either condition, the controller sets:
 
 - Tesla charge current to 32 A.
-- SolarEdge backup reserve to 50%.
+- SolarEdge backup reserve to the battery's state of charge when charging starts.
 
 ### Peak hours
 
@@ -100,15 +100,17 @@ ten minutes while the home battery is low.
 ## Home battery rules
 
 During off-peak or Intelligent dispatch charging, the SolarEdge backup reserve
-is set to 50%.
+is set to the battery's current whole percentage when charging starts. This
+prevents the home battery from supporting the EV without requesting that
+SolarEdge charge it from the grid.
 
 When the Tesla is not charging, the controller restores the backup reserve to
 0%, allowing normal battery discharge. It does not restore the reserve when
 SolarEdge storage control mode is `Time of Use`.
 
 During peak-hour charging, the controller also leaves SolarEdge storage policy
-unchanged when `Time of Use` is selected. Off-peak charging always sets a 50%
-reserve, including when Time of Use is selected.
+unchanged when `Time of Use` is selected. Off-peak charging always sets a
+state-of-charge reserve, including when Time of Use is selected.
 
 When the Tesla leaves home, the controller sends no Tesla or Octopus commands.
 It restores SolarEdge backup reserve to 0% as local cleanup, unless SolarEdge
@@ -124,7 +126,8 @@ Each controller run applies the first matching state:
    Charge is enabled.
 3. Tesla scheduled charging: leave start and stop timing to Tesla.
 4. Smart Charge while Tesla is not charging: leave start timing to Octopus.
-5. Tesla charging in off-peak or Intelligent dispatch: 32 A and 50% reserve.
+5. Tesla charging in off-peak or Intelligent dispatch: 32 A and reserve the
+   battery's starting state of charge.
 6. Tesla charging in peak hours: apply the 16 A and solar-matching rules.
 7. Tesla plugged in, not scheduled, and Smart Charge off: start Tesla according
    to the applicable off-peak or peak-hour rule.
@@ -164,12 +167,12 @@ Use these entities to check controller behavior:
   solar-headroom samples have been collected following a restart.
 - `sensor.ev_available_solar_power` shows the power used for low-battery solar
   matching.
-- `binary_sensor.ev_off_peak_charging_window` identifies 32 A / 50% reserve
+- `binary_sensor.ev_off_peak_charging_window` identifies 32 A / held-SOC reserve
   conditions.
 - `number.tesla_model_3_charge_current` shows the latest requested Tesla
   current.
-- `number.solaredge_multi_i1_backup_reserve` is 50% during off-peak Tesla
-  charging and normally 0% when the Tesla is not charging.
+- `number.solaredge_multi_i1_backup_reserve` holds the battery's starting state
+  of charge during off-peak Tesla charging and is normally 0% otherwise.
 
 If Tesla entities are unavailable, the reconciliation script exits without
 sending Tesla commands. This is intentional fail-safe behavior.
