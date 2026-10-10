@@ -130,6 +130,24 @@ the battery; only discharge is blocked. If the reserve is above the battery's
 state of charge, it is lowered, so SolarEdge never charges the battery from
 the grid to reach it.
 
+### Overnight hold
+
+`sensor.battery_overnight_plan` is made at 23:00 (or on a
+`battery_plan_refresh` event). Its `hold` attribute is true when the battery
+would otherwise run down overnight and leave the peak-rate morning short:
+stored energy minus 2.0 kWh overnight load is below the 2.3 kWh morning load.
+During the off-peak tariff window, the controller then holds the battery the
+same way as for grid charging, so the house runs on cheap grid power and the
+stored energy is kept for peak hours. When the battery comfortably lasts the
+night, it is not held, keeping off-grid nights. Plans older than 12 hours are
+ignored.
+
+The plan's state is the state of charge needed at 05:30 to cover the morning
+and evening, after tomorrow's forecast solar surplus (midway between Solcast
+p10 and p50). Grid charging to that target is not enabled yet.
+`automation.battery_overnight_plan_log` writes each plan's reason to the
+logbook.
+
 At all other times, including when the Tesla is away, the controller restores
 the backup reserve to 0%.
 
@@ -142,7 +160,8 @@ The controller writes it only when the value needs to change.
 
 ## Control precedence
 
-The backup reserve is set first, as described above. Each controller run then
+The backup reserve is set first, as described above (grid charging or the
+overnight hold). Each controller run then
 applies the first matching state:
 
 1. Tesla away from home: make no Tesla or Octopus changes.
@@ -172,6 +191,9 @@ The controller is implemented by:
 - Car first or battery first: `binary_sensor.ev_car_first`
 - Solcast p10 remaining today: `sensor.solar_remaining_today_p10`
 - Storage mode check: `automation.solaredge_storage_mode_check`
+- Overnight battery plan: `sensor.battery_overnight_plan`
+  (`templates/battery_plan.yaml`), logged by
+  `automation.battery_overnight_plan_log`
 
 ## Key entities
 

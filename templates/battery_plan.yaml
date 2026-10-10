@@ -1,0 +1,57 @@
+# Overnight house battery plan, made at 23:00 for the coming day.
+#
+# The battery should cover the peak-rate morning (05:30 until the sun takes
+# over) and evening (when the sun fades until 23:30). Daytime solar beyond the
+# house load refills it.
+#
+# hold: the battery would otherwise run down overnight (at off-peak rates) and
+# leave the morning short, so hold it through the off-peak window and let the
+# house run on cheap grid power. When the battery comfortably lasts the night,
+# it is not held, keeping off-grid nights.
+#
+# target: state of charge needed at 05:30 to cover the morning and, after
+# tomorrow's solar surplus, the evening. Grid charging to it is not enabled yet.
+#
+# House loads are 75th percentiles from history (Oct 2025 - Oct 2026,
+# excluding EV charging). The forecast is midway between Solcast p10 and p50.
+
+- triggers:
+    - trigger: time
+      at: "23:00:00"
+    - trigger: event
+      event_type: battery_plan_refresh
+  actions:
+    - variables:
+        capacity: "{{ states('sensor.solaredge_multi_i1_b1_available_energy') | float(8.7) }}"
+        soc: "{{ states('sensor.solaredge_battery1_state_of_charge') | float(0) }}"
+        stored: "{{ capacity * soc / 100 }}"
+        overnight_load: 2.0
+        morning_load: 2.3
+        daytime_load: 5.5
+        evening_load: 7.0
+        solar: >
+          {{ ((state_attr('sensor.solcast_pv_forecast_forecast_tomorrow', 'estimate10') | float(0)
+              + state_attr('sensor.solcast_pv_forecast_forecast_tomorrow', 'estimate') | float(0)) / 2) | round(1) }}
+        surplus: "{{ ([solar - daytime_load, 0] | max * 0.95) | round(1) }}"
+        target_kwh: "{{ [[morning_load, morning_load + evening_load - surplus] | max, capacity] | min }}"
+        hold: "{{ stored - overnight_load < morning_load }}"
+  sensor:
+    - name: Battery Overnight Plan
+      unique_id: battery_overnight_plan
+      unit_of_measurement: "%"
+      icon: mdi:battery-clock
+      state: "{{ (100 * target_kwh / capacity) | round(0) }}"
+      attributes:
+        hold: "{{ hold }}"
+        soc_at_plan: "{{ soc | round(0) }}"
+        solar_forecast: "{{ solar }}"
+        solar_surplus: "{{ surplus }}"
+        reason: >-
+          {%- if hold -%}
+            Battery {{ soc | round(0) }}% would run down overnight; hold it 23:30-05:30.
+          {%- else -%}
+            Battery {{ soc | round(0) }}% lasts the night; no hold.
+          {%- endif %}
+          Tomorrow ~{{ solar }} kWh solar, ~{{ surplus }} kWh to the battery;
+          {{ (100 * target_kwh / capacity) | round(0) }}% needed at 05:30.
+        planned_at: "{{ now().isoformat() }}"

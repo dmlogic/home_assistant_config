@@ -1,0 +1,15 @@
+alias: Battery overnight plan log
+description: Record each overnight battery plan and its reason in the logbook.
+triggers:
+  - trigger: state
+    entity_id: sensor.battery_overnight_plan
+conditions:
+  - condition: template
+    value_template: "{{ has_value('sensor.battery_overnight_plan') }}"
+actions:
+  - service: logbook.log
+    data:
+      name: Battery plan
+      entity_id: sensor.battery_overnight_plan
+      message: "{{ state_attr('sensor.battery_overnight_plan', 'reason') }}"
+mode: queued

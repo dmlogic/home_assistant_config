@@ -19,6 +19,13 @@ ev_charge_reconcile:
         # Charging from the grid: Force fast charge, off-peak, or Octopus in control.
         # Octopus is included so the hold applies before its dispatch sensor updates.
         grid_charging: "{{ at_home and charging and (override or off_peak or smart_charge) }}"
+        # Overnight battery hold from the 23:00 plan (templates/battery_plan.yaml),
+        # during the off-peak tariff window only. Ignore plans older than 12 hours.
+        overnight_hold: >
+          {% set plan_at = as_datetime(state_attr('sensor.battery_overnight_plan', 'planned_at')) %}
+          {{ is_state('binary_sensor.octopus_energy_electricity_23e5077367_2000016805578_off_peak', 'on')
+             and state_attr('sensor.battery_overnight_plan', 'hold') in [true, 'True', 'true']
+             and plan_at is not none and (now() - plan_at).total_seconds() < 43200 }}
         battery_soc: "{{ states('sensor.solaredge_battery1_state_of_charge') | float(-1) }}"
         battery_reserve_floor: "{{ battery_soc | int(0) }}"
         current_amps: "{{ states('number.tesla_model_3_charge_current') | float(-1) }}"
@@ -44,12 +51,13 @@ ev_charge_reconcile:
           {{ has_value('sensor.solaredge_battery1_state_of_charge')
              and has_value('number.solaredge_multi_i1_backup_reserve') }}
 
-    # The house battery never supports grid charging of the car. Hold the reserve
-    # at the battery's state of charge when charging starts; solar can still
-    # charge the battery. Lowering a reserve above the floor stops SolarEdge
-    # charging the battery from the grid to reach it.
+    # The house battery never supports grid charging of the car, and is held
+    # overnight when the plan says so. Hold the reserve at the battery's state
+    # of charge when the hold starts; solar can still charge the battery.
+    # Lowering a reserve above the floor stops SolarEdge charging the battery
+    # from the grid to reach it.
     - choose:
-        - conditions: "{{ battery_available and grid_charging }}"
+        - conditions: "{{ battery_available and (grid_charging or overnight_hold) }}"
           sequence:
             - if: "{{ backup_reserve == 0 or backup_reserve > battery_reserve_floor }}"
               then:
