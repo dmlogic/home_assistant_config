@@ -8,9 +8,9 @@ entities:
     color_mode: brightness
     brightness: 255
     state: "on"
-  switch.porch:
+  light.kitchen_handrails:
     icon: mdi:lightbulb
-    friendly_name: Porch
+    friendly_name: Kitchen handrails
     state: "on"
   light.hallway_2:
     supported_color_modes:
@@ -24,7 +24,7 @@ icon: mdi:lightbulb-multiple
 metadata:
   light.front_of_house_2:
     entity_only: true
-  switch.porch:
+  light.kitchen_handrails:
     entity_only: true
   light.hallway_2:
     entity_only: true

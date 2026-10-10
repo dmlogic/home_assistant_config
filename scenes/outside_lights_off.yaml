@@ -1,8 +1,8 @@
 name: Outside lights off
 entities:
-  switch.porch:
+  light.kitchen_handrails:
     icon: mdi:lightbulb
-    friendly_name: Porch
+    friendly_name: Kitchen handrails
     state: 'off'
   light.front_of_house_2:
     supported_color_modes:
@@ -17,7 +17,7 @@ entities:
     supported_features: 32
     state: 'off'
 metadata:
-  switch.porch:
+  light.kitchen_handrails:
     entity_only: true
   light.front_of_house_2:
     entity_only: true

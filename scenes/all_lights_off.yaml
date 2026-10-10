@@ -60,9 +60,9 @@ entities:
     friendly_name: Down room
     supported_features: 32
     state: "off"
-  switch.porch:
+  light.kitchen_handrails:
     icon: mdi:lightbulb
-    friendly_name: Porch
+    friendly_name: Kitchen handrails
     state: "off"
 icon: mdi:lightbulb-multiple-off
 metadata:
@@ -86,5 +86,5 @@ metadata:
     entity_only: true
   light.down_room_2:
     entity_only: true
-  switch.porch:
+  light.kitchen_handrails:
     entity_only: true
