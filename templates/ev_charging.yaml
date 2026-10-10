@@ -8,7 +8,48 @@
         {{ has_value('binary_sensor.octopus_energy_electricity_23e5077367_2000016805578_off_peak')
            and has_value('binary_sensor.octopus_energy_00000000_0002_4000_8020_0000000bb802_intelligent_dispatching') }}
 
+    # On when the pessimistic (p10) solar forecast for the rest of today will
+    # still fill the house battery and cover the house until sunset. The car may
+    # then take solar the battery would otherwise have stored. Switches off at
+    # once, but only switches on after 15 minutes, to avoid flapping.
+    - name: EV Car First
+      unique_id: ev_car_first
+      icon: mdi:car-arrow-left
+      state: >
+        {% set capacity = states('sensor.solaredge_multi_i1_b1_available_energy') | float(8.7) %}
+        {% set soc = states('sensor.solaredge_battery1_state_of_charge') | float(0) %}
+        {% set battery_gap = capacity * (100 - soc) / 100 / 0.95 %}
+        {% set sunset = as_datetime(state_attr('sun.sun', 'next_setting')) %}
+        {% set daylight_hours = (sunset - now()).total_seconds() / 3600
+             if is_state('sun.sun', 'above_horizon') and sunset is not none else 0 %}
+        {% set house = daylight_hours * 0.6 %}
+        {{ states('sensor.solar_remaining_today_p10') | float(0) >= battery_gap + house + 1.5 }}
+      availability: >
+        {{ has_value('sensor.solar_remaining_today_p10')
+           and has_value('sensor.solaredge_battery1_state_of_charge') }}
+      delay_on: "00:15:00"
+
 - sensor:
+  # Solcast pessimistic (p10) generation for the rest of today.
+  - name: Solar Remaining Today P10
+    unique_id: solar_remaining_today_p10
+    device_class: energy
+    unit_of_measurement: kWh
+    state: >
+      {% set ns = namespace(total=0) %}
+      {% for period in state_attr('sensor.solcast_pv_forecast_forecast_today', 'detailedForecast') or [] %}
+        {% set start = period.period_start if period.period_start is datetime else as_datetime(period.period_start) %}
+        {% set end = start + timedelta(minutes=30) %}
+        {% if end > now() %}
+          {% set fraction = (end - [start, now()] | max).total_seconds() / 1800 %}
+          {% set ns.total = ns.total + period.pv_estimate10 * 0.5 * fraction %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.total | round(2) }}
+    availability: "{{ state_attr('sensor.solcast_pv_forecast_forecast_today', 'detailedForecast') is not none }}"
+
+  # Solar power the car could use. When the car comes first, this includes the
+  # power currently charging the house battery.
   - name: EV Solar Headroom
     unique_id: ev_solar_headroom
     device_class: power
@@ -18,13 +59,16 @@
       {% set export = states('sensor.power_grid_export') | float(0) %}
       {% set import = states('sensor.power_grid_import') | float(0) %}
       {% set battery_discharge = states('sensor.power_battery_discharging') | float(0) %}
-      {% set tesla_power = states('sensor.tesla_model_3_charger_power') | float(0) * 1000 %}
-      {{ [export - import + tesla_power - battery_discharge - 250, 0] | max | round(0) }}
+      {% set battery_charge = states('sensor.power_battery_charging') | float(0)
+           if is_state('binary_sensor.ev_car_first', 'on') else 0 %}
+      {% set tesla_power = states('sensor.ev_home_charging_power') | float(0) %}
+      {{ [export - import + tesla_power + battery_charge - battery_discharge - 250, 0] | max | round(0) }}
     availability: >
       {{ has_value('sensor.power_grid_export')
          and has_value('sensor.power_grid_import')
          and has_value('sensor.power_battery_discharging')
-         and has_value('sensor.tesla_model_3_charger_power') }}
+         and has_value('sensor.power_battery_charging')
+         and has_value('sensor.ev_home_charging_power') }}
 
   - name: EV Available Solar Power
     unique_id: ev_available_solar_power

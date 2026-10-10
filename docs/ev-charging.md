@@ -27,9 +27,10 @@ on the dashboard except as a fallback or diagnostic control.
 ### Octopus Smart Charge
 
 When Smart Charge is on, Octopus controls normal charging start and stop times.
-The controller still sets the Tesla current to 32 A and preserves the SolarEdge
-battery's starting state of charge while the Tesla is charging in an Octopus
-dispatch or an off-peak window.
+Whenever the Tesla is charging with Smart Charge on, the controller treats it
+as grid charging: it sets the Tesla current to 32 A and holds the SolarEdge
+battery's starting state of charge. This applies even before the Octopus
+dispatch sensor turns on.
 
 When Smart Charge is off, a plugged-in Tesla without a pending Tesla charging
 schedule is started by the controller and follows the peak-hour rules below.
@@ -43,6 +44,9 @@ and solar matching:
 - with Smart Charge off, it starts the Tesla directly;
 - it turns itself off, and turns off Octopus Boost, when the Tesla reaches its
   configured charge limit.
+- the house battery is held at its starting state of charge, as for all grid
+  charging. During peak hours the house imports at peak rate while the
+  override runs.
 
 The controller never changes the Tesla charge limit.
 
@@ -72,67 +76,88 @@ While the Tesla is charging in either condition, the controller sets:
 - Tesla charge current to 32 A.
 - SolarEdge backup reserve to the battery's state of charge when charging starts.
 
+### Car first or battery first
+
+`binary_sensor.ev_car_first` is on when Solcast's pessimistic (p10) forecast
+for the rest of today, `sensor.solar_remaining_today_p10`, covers:
+
+- the energy to fill the house battery (allowing 5% charging loss);
+- house load until sunset, assumed to be 0.6 kW;
+- a 1.5 kWh margin.
+
+It turns off immediately and turns on after 15 minutes. When it is on, solar
+headroom includes the power charging the house battery, so the car can take
+solar the battery would otherwise store. When it is off, or Solcast is
+unavailable, the car only gets solar that would otherwise be exported.
+
 ### Peak hours
 
 Outside off-peak and an Intelligent dispatch, the controller applies these
 daytime rules:
 
-- Tesla charge current never exceeds 16 A.
-- Above 50% SolarEdge battery state of charge, Tesla charge current is 16 A.
-- At or below 50% battery state of charge, Tesla current is calculated from
-  available solar power and constrained to 5-16 A.
+- Tesla charge current never exceeds 16 A. Above this, house plus car load
+  exceeds the inverter's 6 kW AC output and the excess comes from the grid.
+- Tesla current is calculated from available solar power and constrained to
+  5-16 A, whatever the house battery's state of charge.
 - Below Tesla's 5 A minimum available capacity, the controller stops charging
   to avoid unintended import or home-battery discharge.
 
 Solar headroom is calculated for every sample as net grid export, plus current
-Tesla charging power, minus home-battery discharge and a 250 W safety margin.
+Tesla charging power, plus house battery charging power when the car comes
+first, minus home-battery discharge and a 250 W safety margin. Tesla charging
+power is charger voltage x current, because the Tesla power sensor reports
+whole kW.
 Grid import and battery discharge are subtracted, so neither can be treated as
 solar capacity. The controller uses the ten-minute average of that headroom and
 the lower of that average and the current headroom. Adding Tesla draw back to
 net export prevents the calculation falling to zero after Tesla begins using
 surplus generation.
 
-After a Home Assistant restart, before the average is available, low-battery
-solar matching uses the current solar-headroom value as a safety fallback. This
+After a Home Assistant restart, before the average is available, solar
+matching uses the current solar-headroom value as a safety fallback. This
 allows the controller to reduce or stop charging immediately rather than wait
-ten minutes while the home battery is low.
+ten minutes.
 
 ## Home battery rules
 
-During off-peak or Intelligent dispatch charging, the SolarEdge backup reserve
-is set to the battery's current whole percentage when charging starts. This
-prevents the home battery from supporting the EV without requesting that
-SolarEdge charge it from the grid.
+The house battery never supports grid charging of the car. Grid charging means
+the Tesla is charging at home and any of these applies: Charge override,
+off-peak or an Intelligent dispatch, or Smart Charge on.
 
-When the Tesla is not charging, the controller restores the backup reserve to
-0%, allowing normal battery discharge. It does not restore the reserve when
-SolarEdge storage control mode is `Time of Use`.
+During grid charging, the SolarEdge backup reserve is set to the battery's
+whole-percentage state of charge when charging starts. Solar can still charge
+the battery; only discharge is blocked. If the reserve is above the battery's
+state of charge, it is lowered, so SolarEdge never charges the battery from
+the grid to reach it.
 
-During peak-hour charging, the controller also leaves SolarEdge storage policy
-unchanged when `Time of Use` is selected. Off-peak charging always sets a
-state-of-charge reserve, including when Time of Use is selected.
+At all other times, including when the Tesla is away, the controller restores
+the backup reserve to 0%.
 
-When the Tesla leaves home, the controller sends no Tesla or Octopus commands.
-It restores SolarEdge backup reserve to 0% as local cleanup, unless SolarEdge
-storage control mode is `Time of Use`.
+The controller expects SolarEdge storage control mode `Maximize Self
+Consumption`. `automation.solaredge_storage_mode_check` raises a notification
+if the mode is anything else for 5 minutes.
+
+The SolarEdge integration stores the backup reserve in inverter flash memory.
+The controller writes it only when the value needs to change.
 
 ## Control precedence
 
-Each controller run applies the first matching state:
+The backup reserve is set first, as described above. Each controller run then
+applies the first matching state:
 
-1. Tesla away from home: make no Tesla or Octopus changes; restore SolarEdge
-   reserve to 0% unless it is in Time of Use mode.
-2. Charge override: immediate 32 A charging; use Octopus Boost when Smart
+1. Tesla away from home: make no Tesla or Octopus changes.
+2. Charge override and Tesla target reached: clear the override and Octopus
+   Boost.
+3. Charge override: immediate 32 A charging; use Octopus Boost when Smart
    Charge is enabled.
-3. Tesla scheduled charging: leave start and stop timing to Tesla.
-4. Smart Charge while Tesla is not charging: leave start timing to Octopus.
-5. Tesla charging in off-peak or Intelligent dispatch: 32 A and reserve the
-   battery's starting state of charge.
-6. Tesla charging in peak hours: apply the 16 A and solar-matching rules.
-7. Tesla plugged in, not scheduled, and Smart Charge off: start Tesla according
-   to the applicable off-peak or peak-hour rule.
-8. Tesla unplugged or not charging: restore the reserve to 0%, unless SolarEdge
-   is in Time of Use mode.
+4. Tesla scheduled charging, target reached or unplugged: leave the Tesla
+   alone.
+5. Tesla grid charging: 32 A.
+6. Smart Charge while Tesla is not charging: leave start timing to Octopus.
+7. Tesla charging in peak hours: solar matching at 5-16 A.
+8. Tesla plugged in, not charging, in off-peak: start at 32 A.
+9. Tesla plugged in, not charging, in peak hours: start when solar headroom
+   allows 5 A.
 
 ## Components
 
@@ -144,6 +169,9 @@ The controller is implemented by:
 - 10-minute solar headroom average: `sensor.ev_solar_headroom_10_minute_average`
 - Available solar calculation: `sensor.ev_available_solar_power`
 - Off-peak window: `binary_sensor.ev_off_peak_charging_window`
+- Car first or battery first: `binary_sensor.ev_car_first`
+- Solcast p10 remaining today: `sensor.solar_remaining_today_p10`
+- Storage mode check: `automation.solaredge_storage_mode_check`
 
 ## Key entities
 
@@ -158,6 +186,8 @@ The controller is implemented by:
 - SolarEdge grid export: `sensor.power_grid_export`
 - SolarEdge backup reserve: `number.solaredge_multi_i1_backup_reserve`
 - SolarEdge storage mode: `select.solaredge_multi_i1_storage_control_mode`
+- SolarEdge battery capacity: `sensor.solaredge_multi_i1_b1_available_energy`
+- Solcast forecast: `sensor.solcast_pv_forecast_forecast_today`
 
 ## Operational checks
 
@@ -165,14 +195,15 @@ Use these entities to check controller behavior:
 
 - `sensor.ev_solar_headroom_10_minute_average` should populate after enough
   solar-headroom samples have been collected following a restart.
-- `sensor.ev_available_solar_power` shows the power used for low-battery solar
-  matching.
+- `sensor.ev_available_solar_power` shows the power used for solar matching.
+- `binary_sensor.ev_car_first` shows whether the car may take solar that would
+  otherwise charge the house battery.
 - `binary_sensor.ev_off_peak_charging_window` identifies 32 A / held-SOC reserve
   conditions.
 - `number.tesla_model_3_charge_current` shows the latest requested Tesla
   current.
 - `number.solaredge_multi_i1_backup_reserve` holds the battery's starting state
-  of charge during off-peak Tesla charging and is normally 0% otherwise.
+  of charge during Tesla grid charging and is normally 0% otherwise.
 
 If Tesla entities are unavailable, the reconciliation script exits without
 sending Tesla commands. This is intentional fail-safe behavior.

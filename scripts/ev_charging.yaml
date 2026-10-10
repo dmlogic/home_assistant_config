@@ -4,7 +4,7 @@ ev_charge_reconcile:
   mode: restart
   fields:
     solar_update:
-      description: Allow a low-battery solar-current adjustment during this run.
+      description: Allow a solar-current adjustment during this run.
       default: false
   sequence:
     - variables:
@@ -16,7 +16,9 @@ ev_charge_reconcile:
         override: "{{ is_state('input_boolean.ev_charge_override', 'on') }}"
         scheduled: "{{ is_state('binary_sensor.scheduled_charging_pending', 'on') }}"
         off_peak: "{{ is_state('binary_sensor.ev_off_peak_charging_window', 'on') }}"
-        time_of_use: "{{ is_state('select.solaredge_multi_i1_storage_control_mode', 'Time of Use') }}"
+        # Charging from the grid: Force fast charge, off-peak, or Octopus in control.
+        # Octopus is included so the hold applies before its dispatch sensor updates.
+        grid_charging: "{{ at_home and charging and (override or off_peak or smart_charge) }}"
         battery_soc: "{{ states('sensor.solaredge_battery1_state_of_charge') | float(-1) }}"
         battery_reserve_floor: "{{ battery_soc | int(0) }}"
         current_amps: "{{ states('number.tesla_model_3_charge_current') | float(-1) }}"
@@ -30,6 +32,7 @@ ev_charge_reconcile:
           {% else %}
             {{ available_solar }}
           {% endif %}
+        solar_amps: "{{ (solar_power / 230) | int(0) if solar_power >= 0 else -1 }}"
         backup_reserve: "{{ states('number.solaredge_multi_i1_backup_reserve') | float(-1) }}"
         battery_level: "{{ states('sensor.tesla_model_3_battery_level') | float(-1) }}"
         charge_limit: "{{ states('number.tesla_model_3_charge_limit') | float(-1) }}"
@@ -39,29 +42,33 @@ ev_charge_reconcile:
              and has_value('number.tesla_model_3_charge_current') }}
         battery_available: >
           {{ has_value('sensor.solaredge_battery1_state_of_charge')
-             and has_value('select.solaredge_multi_i1_storage_control_mode')
              and has_value('number.solaredge_multi_i1_backup_reserve') }}
 
-    - if: >
-        {{ battery_available and not time_of_use
-           and not (charging and off_peak) and backup_reserve != 0 }}
-      then:
-        - service: number.set_value
-          target:
-            entity_id: number.solaredge_multi_i1_backup_reserve
-          data:
-            value: 0
-
+    # The house battery never supports grid charging of the car. Hold the reserve
+    # at the battery's state of charge when charging starts; solar can still
+    # charge the battery. Lowering a reserve above the floor stops SolarEdge
+    # charging the battery from the grid to reach it.
     - choose:
-        - conditions: "{{ not at_home }}"
+        - conditions: "{{ battery_available and grid_charging }}"
           sequence:
-            - if: "{{ battery_available and not time_of_use and backup_reserve != 0 }}"
+            - if: "{{ backup_reserve == 0 or backup_reserve > battery_reserve_floor }}"
               then:
                 - service: number.set_value
                   target:
                     entity_id: number.solaredge_multi_i1_backup_reserve
                   data:
-                    value: 0
+                    value: "{{ battery_reserve_floor }}"
+        - conditions: "{{ battery_available and backup_reserve != 0 }}"
+          sequence:
+            - service: number.set_value
+              target:
+                entity_id: number.solaredge_multi_i1_backup_reserve
+              data:
+                value: 0
+
+    - choose:
+        - conditions: "{{ not at_home }}"
+          sequence:
             - stop: Tesla is away from home; local battery cleanup only.
 
         - conditions: "{{ override and target_reached }}"
@@ -101,27 +108,9 @@ ev_charge_reconcile:
 
         - conditions: "{{ target_reached or not plugged_in or scheduled }}"
           sequence:
-            - if: "{{ battery_available and not time_of_use and backup_reserve != 0 }}"
-              then:
-                - service: number.set_value
-                  target:
-                    entity_id: number.solaredge_multi_i1_backup_reserve
-                  data:
-                    value: 0
             - stop: Tesla is unavailable for automatic charging.
 
-        - conditions: "{{ smart_charge and not charging }}"
-          sequence:
-            - if: "{{ battery_available and not time_of_use and backup_reserve != 0 }}"
-              then:
-                - service: number.set_value
-                  target:
-                    entity_id: number.solaredge_multi_i1_backup_reserve
-                  data:
-                    value: 0
-            - stop: Octopus Intelligent controls the charging start time.
-
-        - conditions: "{{ charging and off_peak }}"
+        - conditions: "{{ grid_charging }}"
           sequence:
             - if: "{{ current_amps != 32 }}"
               then:
@@ -130,56 +119,34 @@ ev_charge_reconcile:
                     entity_id: number.tesla_model_3_charge_current
                   data:
                     value: 32
-            - if: >
-                {{ battery_available
-                   and (backup_reserve == 0 or backup_reserve > battery_reserve_floor) }}
-              then:
-                - service: number.set_value
-                  target:
-                    entity_id: number.solaredge_multi_i1_backup_reserve
-                  data:
-                    value: "{{ battery_reserve_floor }}"
-            - stop: Off-peak charging configured.
+            - stop: Grid charging configured.
 
-        - conditions: "{{ charging and battery_available }}"
+        - conditions: "{{ smart_charge }}"
           sequence:
-            - if: "{{ not time_of_use and backup_reserve != 0 }}"
+            - stop: Octopus Intelligent controls the charging start time.
+
+        # Peak hours: solar only. The headroom excludes battery discharge, so the
+        # car never runs down the house battery.
+        - conditions: "{{ charging }}"
+          sequence:
+            - if: "{{ solar_update and solar_amps >= 0 }}"
               then:
-                - service: number.set_value
-                  target:
-                    entity_id: number.solaredge_multi_i1_backup_reserve
-                  data:
-                    value: 0
-            - choose:
-                - conditions: "{{ battery_soc > 50 }}"
-                  sequence:
-                    - if: "{{ current_amps != 16 }}"
+                - choose:
+                    - conditions: "{{ solar_amps < 5 }}"
+                      sequence:
+                        - service: switch.turn_off
+                          target:
+                            entity_id: switch.tesla_model_3_charge
+                  default:
+                    - variables:
+                        target_amps: "{{ [solar_amps, 16] | min }}"
+                    - if: "{{ current_amps != target_amps }}"
                       then:
                         - service: number.set_value
                           target:
                             entity_id: number.tesla_model_3_charge_current
                           data:
-                            value: 16
-                - conditions: "{{ solar_update and solar_power >= 0 }}"
-                  sequence:
-                    - variables:
-                        solar_amps: "{{ (solar_power / 230) | int(0) }}"
-                    - choose:
-                        - conditions: "{{ solar_amps < 5 }}"
-                          sequence:
-                            - service: switch.turn_off
-                              target:
-                                entity_id: switch.tesla_model_3_charge
-                      default:
-                        - variables:
-                            target_amps: "{{ [solar_amps, 16] | min }}"
-                        - if: "{{ current_amps != target_amps }}"
-                          then:
-                            - service: number.set_value
-                              target:
-                                entity_id: number.tesla_model_3_charge_current
-                              data:
-                                value: "{{ target_amps }}"
+                            value: "{{ target_amps }}"
             - stop: Peak charging configured.
 
         - conditions: "{{ off_peak }}"
@@ -195,35 +162,17 @@ ev_charge_reconcile:
               target:
                 entity_id: switch.tesla_model_3_charge
 
-        - conditions: "{{ battery_available and battery_soc > 50 }}"
+        - conditions: "{{ solar_update and solar_amps >= 5 }}"
           sequence:
-            - if: "{{ current_amps != 16 }}"
+            - variables:
+                target_amps: "{{ [solar_amps, 16] | min }}"
+            - if: "{{ current_amps != target_amps }}"
               then:
                 - service: number.set_value
                   target:
                     entity_id: number.tesla_model_3_charge_current
                   data:
-                    value: 16
+                    value: "{{ target_amps }}"
             - service: switch.turn_on
               target:
                 entity_id: switch.tesla_model_3_charge
-
-        - conditions: "{{ battery_available and solar_update and solar_power >= 0 }}"
-          sequence:
-            - variables:
-                solar_amps: "{{ (solar_power / 230) | int(0) }}"
-            - choose:
-                - conditions: "{{ solar_amps >= 5 }}"
-                  sequence:
-                    - variables:
-                        target_amps: "{{ [solar_amps, 16] | min }}"
-                    - if: "{{ current_amps != target_amps }}"
-                      then:
-                        - service: number.set_value
-                          target:
-                            entity_id: number.tesla_model_3_charge_current
-                          data:
-                            value: "{{ target_amps }}"
-                    - service: switch.turn_on
-                      target:
-                        entity_id: switch.tesla_model_3_charge
