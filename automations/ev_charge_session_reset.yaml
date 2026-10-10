@@ -1,0 +1,18 @@
+alias: EV charge session reset
+description: Start new session energy counters when the Tesla is plugged in at home.
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.tesla_model_3_charge_cable
+    from: "off"
+    to: "on"
+conditions:
+  - condition: state
+    entity_id: device_tracker.tesla_model_3_location
+    state: home
+actions:
+  - service: utility_meter.reset
+    target:
+      entity_id:
+        - sensor.ev_solar_energy_session
+        - sensor.ev_grid_energy_session
+mode: single

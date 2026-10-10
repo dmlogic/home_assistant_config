@@ -1,0 +1,183 @@
+# Trackers for the power strategy: off-grid streaks, self-sufficiency, how much
+# of the car's home charging came from the sun, and forecast vs actual solar.
+
+- sensor:
+  # Straight from the grid meter, so battery charging from the grid counts as import.
+  - name: Grid Import Power Meter
+    unique_id: grid_import_power_meter
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: W
+    state: "{{ [0 - states('sensor.solaredge_multi_i1_m1_ac_power') | float(0), 0] | max | round(0) }}"
+    availability: "{{ has_value('sensor.solaredge_multi_i1_m1_ac_power') }}"
+
+  # Tesla charger_power is reported in whole kW, so use voltage x current instead.
+  # Only charging at home counts.
+  - name: EV Home Charging Power
+    unique_id: ev_home_charging_power
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: W
+    state: >
+      {% if is_state('sensor.tesla_model_3_charging', 'charging')
+            and is_state('device_tracker.tesla_model_3_location', 'home') %}
+        {{ (states('sensor.tesla_model_3_charger_voltage') | float(0)
+            * states('sensor.tesla_model_3_charger_current') | float(0)) | round(0) }}
+      {% else %}
+        0
+      {% endif %}
+
+  # Grid import is attributed to the car first, so this is conservative. Battery
+  # discharge counts as solar: the controller stops the battery feeding the car
+  # whenever the car charges from the grid.
+  - name: EV Grid Charging Power
+    unique_id: ev_grid_charging_power
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: W
+    state: >
+      {{ [states('sensor.ev_home_charging_power') | float(0),
+          states('sensor.grid_import_power_meter') | float(0)] | min | round(0) }}
+
+  - name: EV Solar Charging Power
+    unique_id: ev_solar_charging_power
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: W
+    state: >
+      {{ [states('sensor.ev_home_charging_power') | float(0)
+          - states('sensor.ev_grid_charging_power') | float(0), 0] | max | round(0) }}
+
+  - name: Off-grid Streak
+    unique_id: off_grid_streak
+    device_class: duration
+    state_class: measurement
+    unit_of_measurement: h
+    state: >
+      {% if is_state('binary_sensor.grid_importing', 'on') %}
+        0
+      {% else %}
+        {{ ((now() - as_datetime(states('sensor.last_grid_import'))).total_seconds() / 3600) | round(1) }}
+      {% endif %}
+    availability: "{{ as_datetime(states('sensor.last_grid_import')) is not none }}"
+
+  - name: Self-sufficiency Today
+    unique_id: self_sufficiency_today
+    state_class: measurement
+    unit_of_measurement: "%"
+    icon: mdi:home-lightning-bolt
+    state: >
+      {% set imp = states('sensor.grid_import_daily') | float(0) %}
+      {% set used = states('sensor.solar_generation_daily') | float(0) + imp
+                    - states('sensor.grid_export_daily') | float(0)
+                    - states('sensor.battery_charged_daily') | float(0)
+                    + states('sensor.battery_discharged_daily') | float(0) %}
+      {{ (100 * (1 - imp / used)) | round(0) if used > 0.1 else 100 }}
+    availability: >
+      {{ has_value('sensor.grid_import_daily') and has_value('sensor.solar_generation_daily')
+         and has_value('sensor.grid_export_daily') and has_value('sensor.battery_charged_daily')
+         and has_value('sensor.battery_discharged_daily') }}
+
+  - name: EV Solar Share Session
+    unique_id: ev_solar_share_session
+    state_class: measurement
+    unit_of_measurement: "%"
+    icon: mdi:car-electric
+    state: >
+      {% set solar = states('sensor.ev_solar_energy_session') | float(0) %}
+      {% set total = solar + states('sensor.ev_grid_energy_session') | float(0) %}
+      {{ (100 * solar / total) | round(0) if total > 0.05 else none }}
+
+  - name: EV Solar Share Month
+    unique_id: ev_solar_share_month
+    state_class: measurement
+    unit_of_measurement: "%"
+    icon: mdi:car-electric
+    state: >
+      {% set solar = states('sensor.ev_solar_energy_monthly') | float(0) %}
+      {% set total = solar + states('sensor.ev_grid_energy_monthly') | float(0) %}
+      {{ (100 * solar / total) | round(0) if total > 0.05 else none }}
+
+# Ignores import blips shorter than 30 seconds, while the inverter catches up
+# with a load change.
+- binary_sensor:
+  - name: Grid Importing
+    unique_id: grid_importing
+    icon: mdi:transmission-tower-import
+    state: "{{ states('sensor.grid_import_power_meter') | float(0) > 100 }}"
+    availability: "{{ has_value('sensor.grid_import_power_meter') }}"
+    delay_on: "00:00:30"
+    delay_off: "00:01:00"
+
+# When grid import last ended.
+- triggers:
+    - trigger: state
+      entity_id: binary_sensor.grid_importing
+      from: "on"
+      to: "off"
+      id: import_ended
+    - trigger: homeassistant
+      event: start
+      id: start
+  sensor:
+    - name: Last Grid Import
+      unique_id: last_grid_import
+      device_class: timestamp
+      state: >
+        {% if trigger.id == 'start' and as_datetime(this.state) is not none %}
+          {{ this.state }}
+        {% else %}
+          {{ now().isoformat() }}
+        {% endif %}
+
+- triggers:
+    - trigger: state
+      entity_id: binary_sensor.grid_importing
+      from: "off"
+      to: "on"
+  sensor:
+    - name: Off-grid Streak Record
+      unique_id: off_grid_streak_record
+      device_class: duration
+      unit_of_measurement: h
+      state: >
+        {% set last = as_datetime(states('sensor.last_grid_import')) %}
+        {% set ended = (now() - last).total_seconds() / 3600 if last is not none else 0 %}
+        {{ [this.state | float(0), ended] | max | round(1) }}
+
+- triggers:
+    - trigger: time
+      at: "05:00:00"
+  sensor:
+    - name: Solar Forecast Today Morning
+      unique_id: solar_forecast_today_morning
+      state_class: measurement
+      unit_of_measurement: kWh
+      state: "{{ states('sensor.energy_production_today') | float(none) }}"
+    - name: Solcast Forecast Today Morning
+      unique_id: solcast_forecast_today_morning
+      state_class: measurement
+      unit_of_measurement: kWh
+      state: "{{ states('sensor.solcast_pv_forecast_forecast_today') | float(none) }}"
+
+- triggers:
+    - trigger: time
+      at: "23:55:00"
+  sensor:
+    - name: Solar Actual Today Recorded
+      unique_id: solar_actual_today_recorded
+      state_class: measurement
+      unit_of_measurement: kWh
+      state: "{{ states('sensor.solar_generation_daily') | float(none) }}"
+    - name: Solar Forecast Ratio
+      unique_id: solar_forecast_ratio
+      state_class: measurement
+      state: >
+        {% set forecast = states('sensor.solar_forecast_today_morning') | float(0) %}
+        {{ (states('sensor.solar_generation_daily') | float(0) / forecast) | round(2) if forecast > 0.5 else none }}
+    - name: Solcast Forecast Ratio
+      unique_id: solcast_forecast_ratio
+      state_class: measurement
+      state: >
+        {% set forecast = states('sensor.solcast_forecast_today_morning') | float(0) %}
+        {{ (states('sensor.solar_generation_daily') | float(0) / forecast) | round(2) if forecast > 0.5 else none }}

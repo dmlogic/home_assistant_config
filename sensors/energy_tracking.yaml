@@ -1,0 +1,16 @@
+- platform: integration
+  # Home EV charging energy supplied by solar (including the house battery)
+  name: EV Solar Charging Energy
+  unique_id: ev_solar_charging_energy
+  source: sensor.ev_solar_charging_power
+  method: left
+  unit_prefix: k
+  round: 3
+- platform: integration
+  # Home EV charging energy supplied by the grid
+  name: EV Grid Charging Energy
+  unique_id: ev_grid_charging_energy
+  source: sensor.ev_grid_charging_power
+  method: left
+  unit_prefix: k
+  round: 3

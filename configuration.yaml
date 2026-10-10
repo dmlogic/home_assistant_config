@@ -4,11 +4,12 @@ default_config:
 frontend:
   themes: !include_dir_merge_named themes
 
-sensor: !include sensors/solaredge_modbus.yaml
+sensor: !include_dir_merge_list sensors/
 template: !include_dir_merge_list templates/
 automation: !include_dir_list automations/
 script: !include_dir_list scripts/
 scene: !include_dir_list scenes/
+utility_meter: !include utility_meter.yaml
 
 input_boolean:
   irrigation_enabled:
