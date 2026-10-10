@@ -1,32 +1,28 @@
 - binary_sensor:
-    # Here we want to establish if energy being exported to the grid is sufficient
-    # to power the immersion water heater. If it is, we turn on the Shelly immersion
-    # heater switch. However, when that switch is already on, we need to account for
-    # it's power usage in our maths (this is )
+    # Is there surplus solar for the immersion heater (about 3.2 kW)?
+    # Off: switch on only when export alone would cover the heater.
+    # On: keep it on until the house imports or the battery discharges, so the
+    # heater never runs on grid or stored energy.
+    # Either way, the battery must be full (or charging at its maximum rate),
+    # so the heater never takes solar the battery needs.
+    # The heater's thermostat cuts in quickly, so the switch state alone says
+    # little; these rules use power flows instead.
     - name: "Surplus power"
+      unique_id: surplus_power
       state: >
-
-        {# This is the amount of power exporting #}
-        {% set export_power = max([states('sensor.solaredge_m1_ac_power') | float(0), 0]) %}
-
-        {# This is the expected amount that the water heater will use #}
-        {% set heater_power = 3222 %}
-
-        {# If we're not exporting at all, it's an immediate no #}
-        {% if export_power <= 0 %}
-        off
+        {% set export = states('sensor.power_grid_export') | float(0) %}
+        {% set import = states('sensor.grid_import_power_meter') | float(0) %}
+        {% set discharge = states('sensor.power_battery_discharging') | float(0) %}
+        {% set battery_full = states('sensor.solaredge_battery1_state_of_charge') | float(0) >= 97
+             or states('sensor.power_battery_charging') | float(0) >= 4500 %}
+        {% if is_state('switch.immersion_plus1m_switch_0', 'on') %}
+          {{ battery_full and import < 200 and discharge < 200 }}
         {% else %}
-
-          {# If the heater is on, add it's current usage to the export #}
-          {% if states("switch.immersion_plus1m_switch_0") == "on" %}
-              {% set switch_power = states('sensor.immersion_plus1m_switch_0_power') | float(0) %}
-              {% set export_power = export_power + switch_power %}
-          {% endif %}
-
-          {# If we're in credit, turn it on #}
-          {%if export_power > heater_power %}
-          on
-          {% else %}
-          off
-          {% endif %}
+          {{ battery_full and export >= 3400 and import < 200 and discharge < 200 }}
         {% endif %}
+      availability: >
+        {{ has_value('sensor.power_grid_export') and has_value('sensor.grid_import_power_meter')
+           and has_value('sensor.power_battery_discharging')
+           and has_value('sensor.solaredge_battery1_state_of_charge') }}
+      delay_on: "00:02:00"
+      delay_off: "00:00:30"

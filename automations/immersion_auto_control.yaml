@@ -1,41 +1,36 @@
 alias: Immersion solar control
 description: >-
-  Turn the immersion heater on or off depending on the amount of surplus energy
-  available
-trigger:
-  - platform: time_pattern
-    minutes: /2
-  - platform: state
+  Run the immersion heater on surplus solar that would otherwise be exported. The car
+  charging at home takes priority. Sends a command only when the heater must change.
+triggers:
+  - trigger: state
     entity_id:
+      - binary_sensor.surplus_power
+      - input_boolean.doors_armed
       - sensor.tesla_model_3_charging
       - device_tracker.tesla_model_3_location
-condition: []
-action:
-  - if:
-      - condition: state
-        entity_id: input_boolean.doors_armed
-        state: "off"
-      - condition: state
-        state: "on"
-        entity_id: binary_sensor.surplus_power
-      - condition: not
-        conditions:
-          - condition: and
-            conditions:
-              - condition: state
-                entity_id: sensor.tesla_model_3_charging
-                state: charging
-              - condition: state
-                entity_id: device_tracker.tesla_model_3_location
-                state: home
-    then:
-      - type: turn_on
-        device_id: 27039aa29995acc00f5acaa3483ce65b
-        entity_id: 129d7d397fa8ec0a010a7086e6935ffe
-        domain: switch
-    else:
-      - type: turn_off
-        device_id: 27039aa29995acc00f5acaa3483ce65b
-        entity_id: 129d7d397fa8ec0a010a7086e6935ffe
-        domain: switch
-mode: restart
+      - switch.immersion_plus1m_switch_0
+  - trigger: time_pattern
+    minutes: /5
+  - trigger: homeassistant
+    event: start
+actions:
+  - variables:
+      wanted: >
+        {{ is_state('input_boolean.doors_armed', 'off')
+           and is_state('binary_sensor.surplus_power', 'on')
+           and not (is_state('sensor.tesla_model_3_charging', 'charging')
+                    and is_state('device_tracker.tesla_model_3_location', 'home')) }}
+  - choose:
+      - conditions: "{{ wanted and is_state('switch.immersion_plus1m_switch_0', 'off') }}"
+        sequence:
+          - service: switch.turn_on
+            target:
+              entity_id: switch.immersion_plus1m_switch_0
+      - conditions: "{{ not wanted and is_state('switch.immersion_plus1m_switch_0', 'on') }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: switch.immersion_plus1m_switch_0
+mode: queued
+max: 3
