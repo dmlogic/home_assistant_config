@@ -126,9 +126,10 @@ off-peak or an Intelligent dispatch, or Smart Charge on.
 
 During grid charging, the SolarEdge backup reserve is set to the battery's
 whole-percentage state of charge when charging starts. Solar can still charge
-the battery; only discharge is blocked. If the reserve is above the battery's
-state of charge, it is lowered, so SolarEdge never charges the battery from
-the grid to reach it.
+the battery; only discharge is blocked. The inverter lets the state of charge
+dip slightly under the reserve, so the reserve is lowered only when it is more
+than 2 points above the state of charge (for example after a BMS
+recalibration). Lowering it on every dip would ratchet the battery down.
 
 ### Overnight hold
 

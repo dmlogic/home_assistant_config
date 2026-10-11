@@ -54,12 +54,13 @@ ev_charge_reconcile:
     # The house battery never supports grid charging of the car, and is held
     # overnight when the plan says so. Hold the reserve at the battery's state
     # of charge when the hold starts; solar can still charge the battery.
-    # Lowering a reserve above the floor stops SolarEdge charging the battery
-    # from the grid to reach it.
+    # The inverter lets the state of charge dip a little under the reserve, so
+    # only lower the reserve after a real drop (e.g. a BMS recalibration), or
+    # each dip ratchets it down and the battery drains a percent at a time.
     - choose:
         - conditions: "{{ battery_available and (grid_charging or overnight_hold) }}"
           sequence:
-            - if: "{{ backup_reserve == 0 or backup_reserve > battery_reserve_floor }}"
+            - if: "{{ backup_reserve == 0 or backup_reserve > battery_soc + 2 }}"
               then:
                 - service: number.set_value
                   target:
