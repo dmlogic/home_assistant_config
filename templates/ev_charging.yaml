@@ -15,22 +15,14 @@
     - name: EV Car First
       unique_id: ev_car_first
       icon: mdi:car-arrow-left
-      state: >
-        {% set capacity = states('sensor.solaredge_multi_i1_b1_available_energy') | float(8.7) %}
-        {% set soc = states('sensor.solaredge_battery1_state_of_charge') | float(0) %}
-        {% set battery_gap = capacity * (100 - soc) / 100 / 0.95 %}
-        {% set sunset = as_datetime(state_attr('sun.sun', 'next_setting')) %}
-        {% set daylight_hours = (sunset - now()).total_seconds() / 3600
-             if is_state('sun.sun', 'above_horizon') and sunset is not none else 0 %}
-        {% set house = daylight_hours * 0.6 %}
-        {{ states('sensor.solar_remaining_today_p10') | float(0) >= battery_gap + house + 1.5 }}
-      availability: >
-        {{ has_value('sensor.solar_remaining_today_p10')
-           and has_value('sensor.solaredge_battery1_state_of_charge') }}
+      state: "{{ states('sensor.solar_spare_today_p10') | float(0) >= 1.5 }}"
+      availability: "{{ has_value('sensor.solar_spare_today_p10') }}"
       delay_on: "00:15:00"
 
 - sensor:
-  # Solcast pessimistic (p10) generation for the rest of today.
+  # Solcast pessimistic (p10) generation for the rest of today. Solcast is set
+  # to the array's 8.8 kW, but the inverter's AC output is limited to 6 kW:
+  # generation above that (attribute above_6kw) can only charge the battery.
   - name: Solar Remaining Today P10
     unique_id: solar_remaining_today_p10
     device_class: energy
@@ -46,7 +38,44 @@
         {% endif %}
       {% endfor %}
       {{ ns.total | round(2) }}
+    attributes:
+      above_6kw: >
+        {% set ns = namespace(total=0) %}
+        {% for period in state_attr('sensor.solcast_pv_forecast_forecast_today', 'detailedForecast') or [] %}
+          {% set start = period.period_start if period.period_start is datetime else as_datetime(period.period_start) %}
+          {% set end = start + timedelta(minutes=30) %}
+          {% if end > now() %}
+            {% set fraction = (end - [start, now()] | max).total_seconds() / 1800 %}
+            {% set ns.total = ns.total + [period.pv_estimate10 - 6.0, 0] | max * 0.5 * fraction %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.total | round(2) }}
     availability: "{{ state_attr('sensor.solcast_pv_forecast_forecast_today', 'detailedForecast') is not none }}"
+
+  # Pessimistic (p10) solar left today beyond filling the house battery
+  # (allowing 5% loss) and the house until sunset (0.6 kW). Generation above
+  # the inverter's 6 kW AC limit counts only towards filling the battery; any
+  # more than that is lost. Used by car first (1.5 kWh) and by filling the
+  # battery late (templates/battery_mode.yaml).
+  - name: Solar Spare Today P10
+    unique_id: solar_spare_today_p10
+    device_class: energy
+    unit_of_measurement: kWh
+    icon: mdi:solar-power-variant
+    state: >
+      {% set capacity = states('sensor.solaredge_multi_i1_b1_available_energy') | float(8.7) %}
+      {% set soc = states('sensor.solaredge_battery1_state_of_charge') | float(0) %}
+      {% set gap = capacity * (100 - soc) / 100 / 0.95 %}
+      {% set total = states('sensor.solar_remaining_today_p10') | float(0) %}
+      {% set above = state_attr('sensor.solar_remaining_today_p10', 'above_6kw') | float(0) %}
+      {% set usable = total - above + [above, gap] | min %}
+      {% set sunset = as_datetime(state_attr('sun.sun', 'next_setting')) %}
+      {% set daylight_hours = (sunset - now()).total_seconds() / 3600
+           if is_state('sun.sun', 'above_horizon') and sunset is not none else 0 %}
+      {{ (usable - gap - daylight_hours * 0.6) | round(2) }}
+    availability: >
+      {{ has_value('sensor.solar_remaining_today_p10')
+         and has_value('sensor.solaredge_battery1_state_of_charge') }}
 
   # Solar power the car could use. When the car comes first, this includes the
   # power currently charging the house battery.

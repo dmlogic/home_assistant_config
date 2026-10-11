@@ -34,12 +34,15 @@ days, without any date rules.
 3. **Charge from Clipped Solar Power** (fill late). When Solcast's
    pessimistic (p10) forecast for the rest of today covers filling the battery
    (allowing 5% loss), the house until sunset (0.6 kW) and a margin, the
-   battery stops charging for now. The `solar_spare` attribute shows that
-   margin in kWh. Solar beyond the house goes to the car, the immersion or
-   export. The battery still takes solar above the inverter's 6 kW AC limit,
-   which would otherwise be lost. As the day goes on, the remaining forecast
-   shrinks, the margin runs out and the battery fills, roughly as late as the
-   forecast safely allows, instead of sitting full from mid-morning. It
+   battery stops charging for now. That margin is
+   `sensor.solar_spare_today_p10`. Solcast is set to the array's 8.8 kW, but
+   the inverter's AC output is limited to 6 kW, so forecast generation above
+   6 kW counts only towards filling the battery. Solar beyond the house goes
+   to the car, the immersion or export. The battery still takes solar above
+   6 kW, which would otherwise be lost. As the day goes on, the remaining
+   forecast shrinks, the margin runs out and the battery fills, roughly as
+   late as the forecast safely allows, instead of sitting full from
+   mid-morning. It
    applies only while:
    - the margin is at least 3 kWh to start (1.5 kWh to continue, the same as
      `binary_sensor.ev_car_first`);
@@ -75,7 +78,9 @@ charging. `automation.battery_overnight_plan_log` logs each plan's reason.
 
 - Desired mode: `sensor.battery_mode`
 - Hold: `binary_sensor.house_battery_hold`
-- Solcast p10 remaining today: `sensor.solar_remaining_today_p10`
+- Solcast p10 remaining today: `sensor.solar_remaining_today_p10` (attribute
+  `above_6kw`)
+- Spare solar: `sensor.solar_spare_today_p10`
 - Controller: `automation.battery_mode_controller`
 - Overnight plan: `sensor.battery_overnight_plan`
 - Mode check: `automation.solaredge_storage_mode_check`

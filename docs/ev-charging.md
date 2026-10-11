@@ -78,12 +78,16 @@ While the Tesla is charging in either condition, the controller sets:
 
 ### Car first or battery first
 
-`binary_sensor.ev_car_first` is on when Solcast's pessimistic (p10) forecast
-for the rest of today, `sensor.solar_remaining_today_p10`, covers:
+`binary_sensor.ev_car_first` is on when `sensor.solar_spare_today_p10` is at
+least 1.5 kWh: Solcast's pessimistic (p10) forecast for the rest of today,
+`sensor.solar_remaining_today_p10`, covers:
 
 - the energy to fill the house battery (allowing 5% charging loss);
 - house load until sunset, assumed to be 0.6 kW;
 - a 1.5 kWh margin.
+
+Forecast generation above the inverter's 6 kW AC limit counts only towards
+filling the battery.
 
 It turns off immediately and turns on after 15 minutes. When it is on, solar
 headroom includes the power charging the house battery, so the car can take
