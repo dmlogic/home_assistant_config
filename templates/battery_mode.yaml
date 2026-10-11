@@ -4,14 +4,17 @@
 # a failure here leaves the battery working normally.
 #
 # Modes, in priority order:
-# - Charge from Solar Power and Grid: winter grid charge. Off-peak only, up to
-#   the 23:00 plan's target (templates/battery_plan.yaml), at a gentle rate.
+# - Charge from Solar Power and Grid: grid top-up. Off-peak only, up to the
+#   23:00 plan's target (templates/battery_plan.yaml), at a gentle rate, when
+#   tomorrow's forecast won't cover the morning and evening.
 # - Charge from Solar Power: hold. The battery does not discharge; solar can
 #   still charge it. While the car charges from the grid, and overnight when
 #   the plan says the battery would otherwise run down before the morning.
-# - Charge from Clipped Solar Power: morning cap on days when solar above the
-#   inverter's 6 kW AC limit is forecast. The battery stops charging below
-#   full and keeps room for solar that would otherwise be lost at midday.
+# - Charge from Clipped Solar Power: fill late. When the pessimistic forecast
+#   says the rest of today will fill the battery anyway, stop charging it for
+#   now: solar goes to the house, car, immersion or export, the battery spends
+#   fewer hours full, and it keeps room for solar above the inverter's 6 kW AC
+#   limit, which it still takes in this mode.
 # - Maximize Self Consumption: normal.
 
 - binary_sensor:
@@ -41,26 +44,6 @@
         {{ car or overnight }}
 
 - sensor:
-    # Pessimistic (p10) solar above the inverter's 6 kW AC limit for the rest
-    # of today: what would be lost if the battery were already full.
-    - name: Solar Clipped Remaining Today P10
-      unique_id: solar_clipped_remaining_today_p10
-      device_class: energy
-      unit_of_measurement: kWh
-      icon: mdi:solar-power-variant
-      state: >
-        {% set ns = namespace(total=0) %}
-        {% for period in state_attr('sensor.solcast_pv_forecast_forecast_today', 'detailedForecast') or [] %}
-          {% set start = period.period_start if period.period_start is datetime else as_datetime(period.period_start) %}
-          {% set end = start + timedelta(minutes=30) %}
-          {% if end > now() %}
-            {% set fraction = (end - [start, now()] | max).total_seconds() / 1800 %}
-            {% set ns.total = ns.total + [period.pv_estimate10 - 6.0, 0] | max * 0.5 * fraction %}
-          {% endif %}
-        {% endfor %}
-        {{ ns.total | round(2) }}
-      availability: "{{ state_attr('sensor.solcast_pv_forecast_forecast_today', 'detailedForecast') is not none }}"
-
     - name: Battery Mode
       unique_id: battery_mode
       icon: mdi:home-battery
@@ -69,7 +52,7 @@
         {% set capacity = states('sensor.solaredge_multi_i1_b1_available_energy') | float(8.7) %}
         {% set previous = this.state | default('') %}
 
-        {# Winter grid charge: 23:30-05:30 off-peak, to a fresh plan's target. Start
+        {# Grid top-up: 23:30-05:30 off-peak, to a fresh plan's target. Start
            2 points below the target so a small shortfall doesn't start a charge. #}
         {% set clock = now().strftime('%H:%M') %}
         {% set plan_at = as_datetime(state_attr('sensor.battery_overnight_plan', 'planned_at')) %}
@@ -80,23 +63,28 @@
         {% set grid_charge = grid_window and soc >= 0
              and (soc < target - 2 or (previous == 'Charge from Solar Power and Grid' and soc < target)) %}
 
-        {# Morning cap: keep room for the rest of today's clipped solar. Only while
-           the p10 forecast still fills the battery and covers the house
-           (binary_sensor.ev_car_first). Leave it when the house imports, since
-           these modes don't discharge, and wait 10 minutes after any import. #}
-        {% set clipped = states('sensor.solar_clipped_remaining_today_p10') | float(0) %}
-        {% set cap = 100 - 100 * clipped / capacity %}
+        {# Fill late: the pessimistic (p10) forecast for the rest of today covers
+           filling the battery, the house until sunset (0.6 kW) and a margin:
+           3 kWh to start, 1.5 kWh to continue (as binary_sensor.ev_car_first).
+           Only above 50%, so there is stored energy to fall back on. These
+           modes don't discharge, so leave when the house imports and wait 10
+           minutes after any import. #}
+        {% set capping = previous == 'Charge from Clipped Solar Power' %}
+        {% set gap = capacity * (100 - soc) / 100 / 0.95 %}
+        {% set sunset = as_datetime(state_attr('sun.sun', 'next_setting')) %}
+        {% set daylight_hours = (sunset - now()).total_seconds() / 3600
+             if is_state('sun.sun', 'above_horizon') and sunset is not none else 0 %}
+        {% set spare = states('sensor.solar_remaining_today_p10') | float(0) - gap - daylight_hours * 0.6 %}
         {% set last_import = as_datetime(states('sensor.last_grid_import')) %}
         {% set import_quiet = is_state('binary_sensor.grid_importing', 'off')
              and (last_import is none or (now() - last_import).total_seconds() > 600) %}
-        {% set capping = previous == 'Charge from Clipped Solar Power' %}
-        {% set cap_on = is_state('binary_sensor.ev_car_first', 'on') and import_quiet
-             and clipped >= (0.3 if capping else 0.5)
-             and soc >= (cap - 3 if capping else cap) %}
+        {% set fill_late = import_quiet and has_value('sensor.solar_remaining_today_p10')
+             and spare >= (1.5 if capping else 3)
+             and soc >= (47 if capping else 50) %}
 
         {%- if grid_charge -%}Charge from Solar Power and Grid
         {%- elif is_state('binary_sensor.house_battery_hold', 'on') -%}Charge from Solar Power
-        {%- elif cap_on -%}Charge from Clipped Solar Power
+        {%- elif fill_late -%}Charge from Clipped Solar Power
         {%- else -%}Maximize Self Consumption
         {%- endif -%}
       attributes:
@@ -111,6 +99,13 @@
           {% set finish = today_at('04:30') if now().hour < 12 else today_at('04:30') + timedelta(days=1) %}
           {% set hours = [(finish - now()).total_seconds() / 3600, 0.5] | max %}
           {{ ([[needed / hours * 1000 / 250, 2] | max, 10] | min | round(0) * 250) | int }}
-        cap: >
+        # Pessimistic solar left today beyond filling the battery and the house
+        # until sunset. Fill late starts at 3 kWh and ends below 1.5 kWh.
+        solar_spare: >
+          {% set soc = states('sensor.solaredge_battery1_state_of_charge') | float(0) %}
           {% set capacity = states('sensor.solaredge_multi_i1_b1_available_energy') | float(8.7) %}
-          {{ (100 - 100 * states('sensor.solar_clipped_remaining_today_p10') | float(0) / capacity) | round(0) }}
+          {% set sunset = as_datetime(state_attr('sun.sun', 'next_setting')) %}
+          {% set daylight_hours = (sunset - now()).total_seconds() / 3600
+               if is_state('sun.sun', 'above_horizon') and sunset is not none else 0 %}
+          {{ (states('sensor.solar_remaining_today_p10') | float(0)
+              - capacity * (100 - soc) / 100 / 0.95 - daylight_hours * 0.6) | round(1) }}

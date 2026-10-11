@@ -4,7 +4,7 @@
     # On: keep it on until the house imports or the battery discharges, so the
     # heater never runs on grid or stored energy.
     # Either way, the battery must be full (or charging at its maximum rate, or
-    # capped for the morning), so the heater never takes solar the battery needs.
+    # filling late), so the heater never takes solar the battery needs.
     # The heater's thermostat cuts in quickly, so the switch state alone says
     # little; these rules use power flows instead.
     - name: "Surplus power"

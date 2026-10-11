@@ -16,31 +16,37 @@ each change is logged to the logbook as "Battery mode".
 
 In priority order:
 
-1. **Charge from Solar Power and Grid** (winter grid charge). Between 23:30
-   and 05:30, during off-peak, when the state of charge is more than 2 points
-   below the 23:00 plan's target. It continues until the target is reached.
-   The rate (`grid_charge_rate` attribute) is set to finish about 04:30,
-   between 500 and 2500 W. That is gentle on the battery and leaves supply
-   headroom while the car charges.
+Nothing here is seasonal: each mode follows the forecast and the tariff, so
+grid top-ups happen mostly on winter nights and filling late mostly on long
+days, without any date rules.
+
+1. **Charge from Solar Power and Grid** (grid top-up). Between 23:30 and
+   05:30, during off-peak, when the state of charge is more than 2 points below
+   the 23:00 plan's target, that is, when tomorrow's forecast won't cover the
+   morning and evening. It continues until the target is reached. The rate
+   (`grid_charge_rate` attribute) is set to finish about 04:30, between 500 and
+   2500 W. That is gentle on the battery and leaves supply headroom while the
+   car charges.
 2. **Charge from Solar Power** (hold). When `binary_sensor.house_battery_hold`
    is on: the car is charging from the grid, or the overnight plan says hold.
    The battery does not discharge; solar can still charge it. See
    [ev-charging.md](ev-charging.md).
-3. **Charge from Clipped Solar Power** (morning cap). On days when Solcast's
-   pessimistic (p10) forecast puts generation above the inverter's 6 kW AC
-   limit, the battery stops charging once its state of charge reaches
-   `100% - remaining clipped energy`. Morning solar beyond the house is
-   exported (or used by the car or immersion). The battery then takes the solar
-   above 6 kW that would otherwise be lost at midday. As the clipping window
-   passes, the cap rises to 100%. The cap applies only while:
-   - at least 0.5 kWh of clipping remains (it ends below 0.3 kWh);
-   - `binary_sensor.ev_car_first` is on, meaning the p10 forecast still fills
-     the battery and covers the house until sunset;
+3. **Charge from Clipped Solar Power** (fill late). When Solcast's
+   pessimistic (p10) forecast for the rest of today covers filling the battery
+   (allowing 5% loss), the house until sunset (0.6 kW) and a margin, the
+   battery stops charging for now. The `solar_spare` attribute shows that
+   margin in kWh. Solar beyond the house goes to the car, the immersion or
+   export. The battery still takes solar above the inverter's 6 kW AC limit,
+   which would otherwise be lost. As the day goes on, the remaining forecast
+   shrinks, the margin runs out and the battery fills, roughly as late as the
+   forecast safely allows, instead of sitting full from mid-morning. It
+   applies only while:
+   - the margin is at least 3 kWh to start (1.5 kWh to continue, the same as
+     `binary_sensor.ev_car_first`);
+   - the state of charge is at least 50% to start (47% to continue), so there
+     is stored energy to fall back on;
    - the house is not importing, and hasn't for 10 minutes. These modes don't
      discharge, so passing cloud would otherwise mean grid import.
-
-   It ends 3 points below the cap, so it doesn't flap. It does nothing in
-   winter, when the forecast never exceeds 6 kW.
 4. **Maximize Self Consumption**: normal.
 
 ## Overnight plan
@@ -60,16 +66,16 @@ charging. `automation.battery_overnight_plan_log` logs each plan's reason.
 
 ## Other effects
 
-- The immersion surplus rule treats a capped battery as full, so the heater
-  uses solar before it is exported.
-- Car solar headroom ignores battery charging while capped, because clipped
-  solar can't reach the car.
+- The immersion surplus rule treats a battery filling late as full, so the
+  heater uses solar before it is exported.
+- Car solar headroom ignores battery charging while filling late, because
+  clipped solar can't reach the car.
 
 ## Components
 
 - Desired mode: `sensor.battery_mode`
 - Hold: `binary_sensor.house_battery_hold`
-- Clipped solar forecast: `sensor.solar_clipped_remaining_today_p10`
+- Solcast p10 remaining today: `sensor.solar_remaining_today_p10`
 - Controller: `automation.battery_mode_controller`
 - Overnight plan: `sensor.battery_overnight_plan`
 - Mode check: `automation.solaredge_storage_mode_check`
