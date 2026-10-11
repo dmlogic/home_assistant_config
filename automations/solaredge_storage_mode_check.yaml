@@ -1,7 +1,9 @@
 alias: SolarEdge storage mode check
 description: >-
-  Warn when the SolarEdge storage control mode is not Maximize Self Consumption, for
-  example after an accidental change in the SolarEdge app. The battery rules assume it.
+  Warn when the SolarEdge storage control mode is not Remote Control, for example
+  after an accidental change in the SolarEdge app. The battery mode controller needs
+  it; without it the battery runs as plain Maximize Self Consumption and only the
+  backup reserve protects it from the car.
 triggers:
   - trigger: state
     entity_id: select.solaredge_multi_i1_storage_control_mode
@@ -12,7 +14,7 @@ conditions:
   - condition: template
     value_template: >
       {{ has_value('select.solaredge_multi_i1_storage_control_mode')
-         and not is_state('select.solaredge_multi_i1_storage_control_mode', 'Maximize Self Consumption') }}
+         and not is_state('select.solaredge_multi_i1_storage_control_mode', 'Remote Control') }}
 actions:
   - service: persistent_notification.create
     data:
@@ -20,9 +22,9 @@ actions:
       title: SolarEdge storage mode changed
       message: >-
         Storage control mode is {{ states('select.solaredge_multi_i1_storage_control_mode') }}.
-        The battery and EV rules expect Maximize Self Consumption.
+        The battery rules expect Remote Control (default mode Maximize Self Consumption).
   - service: logbook.log
     data:
       name: SolarEdge storage mode
-      message: "is {{ states('select.solaredge_multi_i1_storage_control_mode') }}, expected Maximize Self Consumption"
+      message: "is {{ states('select.solaredge_multi_i1_storage_control_mode') }}, expected Remote Control"
 mode: single

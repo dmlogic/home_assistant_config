@@ -74,7 +74,7 @@ Off-peak charging applies when either of these is on:
 While the Tesla is charging in either condition, the controller sets:
 
 - Tesla charge current to 32 A.
-- SolarEdge backup reserve to the battery's state of charge when charging starts.
+- A house battery hold (see Home battery rules).
 
 ### Car first or battery first
 
@@ -120,49 +120,37 @@ ten minutes.
 
 ## Home battery rules
 
-The house battery never supports grid charging of the car. Grid charging means
-the Tesla is charging at home and any of these applies: Charge override,
-off-peak or an Intelligent dispatch, or Smart Charge on.
+The house battery never supports grid charging of the car.
+`binary_sensor.house_battery_hold` is on when the Tesla is at home and either:
 
-During grid charging, the SolarEdge backup reserve is set to the battery's
-whole-percentage state of charge when charging starts. Solar can still charge
-the battery; only discharge is blocked. The inverter lets the state of charge
-dip slightly under the reserve, so the reserve is lowered only when it is more
+- it is charging with Charge override, off-peak or an Intelligent dispatch, or
+  Smart Charge on; or
+- it is plugged in and below its charge limit during off-peak or a dispatch,
+  so the hold is in place before the car reports that it is charging.
+
+It is also on overnight when the 23:00 battery plan says the battery would
+otherwise run down before the morning. See [battery-mode.md](battery-mode.md)
+for the plan and the inverter modes.
+
+In SolarEdge Remote Control (normal), `automation.battery_mode_controller`
+applies the hold as the inverter command "Charge from Solar Power": the battery
+does not discharge, and solar can still charge it. This controller then keeps
+the backup reserve at 0%.
+
+If the storage control mode is anything else (for example after a change in
+the SolarEdge app), the controller falls back to the backup reserve: it sets
+the reserve to the battery's whole-percentage state of charge when the hold
+starts, and back to 0% afterwards. The inverter lets the state of charge dip
+slightly under the reserve, so the reserve is lowered only when it is more
 than 2 points above the state of charge (for example after a BMS
-recalibration). Lowering it on every dip would ratchet the battery down.
-
-### Overnight hold
-
-`sensor.battery_overnight_plan` is made at 23:00 (or on a
-`battery_plan_refresh` event). Its `hold` attribute is true when the battery
-would otherwise run down overnight and leave the peak-rate morning short:
-stored energy minus 2.0 kWh overnight load is below the 2.3 kWh morning load.
-During the off-peak tariff window, the controller then holds the battery the
-same way as for grid charging, so the house runs on cheap grid power and the
-stored energy is kept for peak hours. When the battery comfortably lasts the
-night, it is not held, keeping off-grid nights. Plans older than 12 hours are
-ignored.
-
-The plan's state is the state of charge needed at 05:30 to cover the morning
-and evening, after tomorrow's forecast solar surplus (midway between Solcast
-p10 and p50). Grid charging to that target is not enabled yet.
-`automation.battery_overnight_plan_log` writes each plan's reason to the
-logbook.
-
-At all other times, including when the Tesla is away, the controller restores
-the backup reserve to 0%.
-
-The controller expects SolarEdge storage control mode `Maximize Self
-Consumption`. `automation.solaredge_storage_mode_check` raises a notification
-if the mode is anything else for 5 minutes.
-
-The SolarEdge integration stores the backup reserve in inverter flash memory.
-The controller writes it only when the value needs to change.
+recalibration). Lowering it on every dip would ratchet the battery down. The
+backup reserve is stored in inverter flash memory, so it is written only when
+it must change. `automation.solaredge_storage_mode_check` raises a
+notification if the mode is not Remote Control for 5 minutes.
 
 ## Control precedence
 
-The backup reserve is set first, as described above (grid charging or the
-overnight hold). Each controller run then
+The backup reserve is set first, as described above. Each controller run then
 applies the first matching state:
 
 1. Tesla away from home: make no Tesla or Octopus changes.
@@ -192,9 +180,9 @@ The controller is implemented by:
 - Car first or battery first: `binary_sensor.ev_car_first`
 - Solcast p10 remaining today: `sensor.solar_remaining_today_p10`
 - Storage mode check: `automation.solaredge_storage_mode_check`
-- Overnight battery plan: `sensor.battery_overnight_plan`
-  (`templates/battery_plan.yaml`), logged by
-  `automation.battery_overnight_plan_log`
+- House battery hold: `binary_sensor.house_battery_hold`
+  (`templates/battery_mode.yaml`), applied by
+  `automation.battery_mode_controller`
 
 ## Key entities
 
@@ -221,12 +209,12 @@ Use these entities to check controller behavior:
 - `sensor.ev_available_solar_power` shows the power used for solar matching.
 - `binary_sensor.ev_car_first` shows whether the car may take solar that would
   otherwise charge the house battery.
-- `binary_sensor.ev_off_peak_charging_window` identifies 32 A / held-SOC reserve
-  conditions.
+- `binary_sensor.ev_off_peak_charging_window` identifies 32 A conditions.
+- `binary_sensor.house_battery_hold` shows whether the house battery is held.
 - `number.tesla_model_3_charge_current` shows the latest requested Tesla
   current.
-- `number.solaredge_multi_i1_backup_reserve` holds the battery's starting state
-  of charge during Tesla grid charging and is normally 0% otherwise.
+- `number.solaredge_multi_i1_backup_reserve` is 0% in Remote Control. In the
+  fallback it holds the battery's starting state of charge during a hold.
 
 If Tesla entities are unavailable, the reconciliation script exits without
 sending Tesla commands. This is intentional fail-safe behavior.

@@ -59,8 +59,10 @@
       {% set export = states('sensor.power_grid_export') | float(0) %}
       {% set import = states('sensor.power_grid_import') | float(0) %}
       {% set battery_discharge = states('sensor.power_battery_discharging') | float(0) %}
+      {# Not while the battery takes only clipped solar: that can't reach the car. #}
       {% set battery_charge = states('sensor.power_battery_charging') | float(0)
-           if is_state('binary_sensor.ev_car_first', 'on') else 0 %}
+           if is_state('binary_sensor.ev_car_first', 'on')
+              and not is_state('sensor.battery_mode', 'Charge from Clipped Solar Power') else 0 %}
       {% set tesla_power = states('sensor.ev_home_charging_power') | float(0) %}
       {{ [export - import + tesla_power + battery_charge - battery_discharge - 250, 0] | max | round(0) }}
     availability: >

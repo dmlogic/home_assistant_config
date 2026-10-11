@@ -13,6 +13,7 @@ triggers:
       - binary_sensor.octopus_energy_electricity_23e5077367_2000016805578_off_peak
       - binary_sensor.scheduled_charging_pending
       - select.solaredge_multi_i1_storage_control_mode
+      - binary_sensor.house_battery_hold
       - sensor.tesla_model_3_battery_level
       - number.tesla_model_3_charge_limit
     id: state_change

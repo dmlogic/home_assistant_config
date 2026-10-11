@@ -1,0 +1,73 @@
+alias: Battery mode controller
+description: >-
+  Apply sensor.battery_mode to the SolarEdge inverter as a Remote Control command
+  (templates/battery_mode.yaml). Commands time out after an hour and the inverter
+  falls back to its default, Maximize Self Consumption; when the command read back
+  from the inverter no longer matches, it is sent again. Registers are written
+  only when they differ.
+triggers:
+  - trigger: state
+    entity_id: sensor.battery_mode
+  - trigger: state
+    entity_id: sensor.battery_mode
+    attribute: grid_charge_rate
+  - trigger: state
+    entity_id:
+      - select.solaredge_multi_i1_storage_command_mode
+      - select.solaredge_multi_i1_storage_control_mode
+    for: "00:00:30"
+  - trigger: time_pattern
+    minutes: /15
+  - trigger: homeassistant
+    event: start
+conditions:
+  - condition: state
+    entity_id: select.solaredge_multi_i1_storage_control_mode
+    state: Remote Control
+  - condition: template
+    value_template: >
+      {{ has_value('sensor.battery_mode')
+         and has_value('select.solaredge_multi_i1_storage_command_mode')
+         and has_value('number.solaredge_multi_i1_storage_command_timeout')
+         and has_value('number.solaredge_multi_i1_storage_charge_limit') }}
+actions:
+  - variables:
+      mode: "{{ states('sensor.battery_mode') }}"
+      charge_limit: >
+        {{ state_attr('sensor.battery_mode', 'grid_charge_rate') | int(500)
+           if mode == 'Charge from Solar Power and Grid' else 5000 }}
+      current_limit: "{{ states('number.solaredge_multi_i1_storage_charge_limit') | float(-1) }}"
+      current_mode: "{{ states('select.solaredge_multi_i1_storage_command_mode') }}"
+  # A gentle rate for grid charging; otherwise at least the battery's 5 kW.
+  - if: >
+      {{ current_limit != charge_limit if mode == 'Charge from Solar Power and Grid'
+         else current_limit < 5000 }}
+    then:
+      - action: number.set_value
+        target:
+          entity_id: number.solaredge_multi_i1_storage_charge_limit
+        data:
+          value: "{{ charge_limit }}"
+  - if: "{{ current_mode != mode }}"
+    then:
+      - if: "{{ states('number.solaredge_multi_i1_storage_command_timeout') | float(0) != 3600 }}"
+        then:
+          - action: number.set_value
+            target:
+              entity_id: number.solaredge_multi_i1_storage_command_timeout
+            data:
+              value: 3600
+      - action: select.select_option
+        target:
+          entity_id: select.solaredge_multi_i1_storage_command_mode
+        data:
+          option: "{{ mode }}"
+      - action: logbook.log
+        data:
+          name: Battery mode
+          entity_id: sensor.battery_mode
+          message: >-
+            {{ current_mode }} -> {{ mode }}{{ ' at ' ~ charge_limit ~ ' W'
+            if mode == 'Charge from Solar Power and Grid' else '' }}
+mode: queued
+max: 3

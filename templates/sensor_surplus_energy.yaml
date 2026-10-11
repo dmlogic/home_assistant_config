@@ -3,8 +3,8 @@
     # Off: switch on only when export alone would cover the heater.
     # On: keep it on until the house imports or the battery discharges, so the
     # heater never runs on grid or stored energy.
-    # Either way, the battery must be full (or charging at its maximum rate),
-    # so the heater never takes solar the battery needs.
+    # Either way, the battery must be full (or charging at its maximum rate, or
+    # capped for the morning), so the heater never takes solar the battery needs.
     # The heater's thermostat cuts in quickly, so the switch state alone says
     # little; these rules use power flows instead.
     - name: "Surplus power"
@@ -14,7 +14,8 @@
         {% set import = states('sensor.grid_import_power_meter') | float(0) %}
         {% set discharge = states('sensor.power_battery_discharging') | float(0) %}
         {% set battery_full = states('sensor.solaredge_battery1_state_of_charge') | float(0) >= 97
-             or states('sensor.power_battery_charging') | float(0) >= 4500 %}
+             or states('sensor.power_battery_charging') | float(0) >= 4500
+             or is_state('sensor.battery_mode', 'Charge from Clipped Solar Power') %}
         {% if is_state('switch.immersion_plus1m_switch_0', 'on') %}
           {{ battery_full and import < 200 and discharge < 200 }}
         {% else %}
