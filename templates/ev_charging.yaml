@@ -1,4 +1,21 @@
 - binary_sensor:
+    # On while the car may be drawing power at home: it reports charging, or its
+    # charge switch turned on in the last 15 minutes (it turns on at once when
+    # Home Assistant starts the car, before the car reports charging). The
+    # switch alone means charging is enabled, not that the car is drawing
+    # power. Tesla data refreshes only every 10 minutes, so stay on for 15
+    # minutes after that, in case the car is still charging.
+    - name: EV May Be Charging
+      unique_id: ev_may_be_charging
+      icon: mdi:ev-station
+      state: >
+        {% set switch = states.switch.tesla_model_3_charge %}
+        {{ is_state('device_tracker.tesla_model_3_location', 'home')
+           and (is_state('sensor.tesla_model_3_charging', 'charging')
+                or (switch is not none and switch.state == 'on'
+                    and (now() - switch.last_changed).total_seconds() < 900)) }}
+      delay_off: "00:15:00"
+
     - name: EV Off Peak Charging Window
       unique_id: ev_off_peak_charging_window
       state: >
@@ -93,8 +110,11 @@
       {# Not while the battery takes only clipped solar: that can't reach the car. #}
       {% set battery_charge = states('sensor.power_battery_charging') | float(0)
            if is_state('binary_sensor.ev_car_first', 'on')
-              and not is_state('sensor.battery_mode', 'Charge from Clipped Solar Power') else 0 %}
-      {% set tesla_power = states('sensor.ev_home_charging_power') | float(0) %}
+              and not is_state('sensor.battery_mode', 'Fill late') else 0 %}
+      {# Once Home Assistant has stopped the car, its reported power can be up to
+         10 minutes old; don't count it as available solar. #}
+      {% set tesla_power = states('sensor.ev_home_charging_power') | float(0)
+           if is_state('switch.tesla_model_3_charge', 'on') else 0 %}
       {{ [export - import + tesla_power + battery_charge - battery_discharge - 250, 0] | max | round(0) }}
     availability: >
       {{ has_value('sensor.power_grid_export')

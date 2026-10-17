@@ -15,7 +15,7 @@
         {% set discharge = states('sensor.power_battery_discharging') | float(0) %}
         {% set battery_full = states('sensor.solaredge_battery1_state_of_charge') | float(0) >= 97
              or states('sensor.power_battery_charging') | float(0) >= 4500
-             or is_state('sensor.battery_mode', 'Charge from Clipped Solar Power') %}
+             or is_state('sensor.battery_mode', 'Fill late') %}
         {% if is_state('switch.immersion_plus1m_switch_0', 'on') %}
           {{ battery_full and import < 200 and discharge < 200 }}
         {% else %}

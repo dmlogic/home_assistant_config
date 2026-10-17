@@ -3,19 +3,22 @@
 # mode is Maximize Self Consumption, and every command expires back to it, so
 # a failure here leaves the battery working normally.
 #
-# Modes, in priority order:
-# - Charge from Solar Power and Grid: grid top-up. Off-peak only, up to the
+# Modes, in priority order, and the inverter command each uses:
+# - Grid top-up ("Charge from Solar Power and Grid"): off-peak only, up to the
 #   23:00 plan's target (templates/battery_plan.yaml), at a gentle rate, when
 #   tomorrow's forecast won't cover the morning and evening.
-# - Charge from Solar Power: hold. The battery does not discharge; solar can
-#   still charge it. While the car charges from the grid, and overnight when
-#   the plan says the battery would otherwise run down before the morning.
-# - Charge from Clipped Solar Power: fill late. When the pessimistic forecast
-#   says the rest of today will fill the battery anyway, stop charging it for
-#   now: solar goes to the house, car, immersion or export, the battery spends
-#   fewer hours full, and it keeps room for solar above the inverter's 6 kW AC
-#   limit, which it still takes in this mode.
-# - Maximize Self Consumption: normal.
+# - Hold ("Maximize Self Consumption" with a 0 W discharge limit): the battery
+#   does not discharge; solar serves the house first and the surplus still
+#   charges the battery. While the car charges from the grid, and overnight
+#   when the plan says the battery would otherwise run down below its target.
+# - Car lock (as Hold): while the car may be solar-charging and the battery has
+#   no energy to spare.
+# - Fill late ("Charge from Clipped Solar Power"): when the pessimistic
+#   forecast says the rest of today will fill the battery anyway, stop charging
+#   it for now: solar goes to the house, car, immersion or export, the battery
+#   spends fewer hours full, and it keeps room for solar above the inverter's
+#   6 kW AC limit, which it still takes in this mode.
+# - Normal ("Maximize Self Consumption").
 
 - binary_sensor:
     - name: House Battery Hold
@@ -60,16 +63,15 @@
         {% set grid_window = (clock >= '23:30' or clock < '05:30')
              and is_state('binary_sensor.octopus_energy_electricity_23e5077367_2000016805578_off_peak', 'on') %}
         {% set grid_charge = grid_window and soc >= 0
-             and (soc < target - 2 or (previous == 'Charge from Solar Power and Grid' and soc < target)) %}
+             and (soc < target - 2 or (previous == 'Grid top-up' and soc < target)) %}
 
         {# Fill late: the pessimistic (p10) forecast covers filling the battery,
            the house until sunset and a margin (sensor.solar_spare_today_p10):
            3 kWh to start, 1.5 kWh to continue (as binary_sensor.ev_car_first).
            Only in daylight and above 50%, so there is stored energy to fall
-           back on. These
-           modes don't discharge, so leave when the house imports and wait 10
-           minutes after any import. #}
-        {% set capping = previous == 'Charge from Clipped Solar Power' %}
+           back on. This mode doesn't discharge, so leave when the house imports
+           and wait 10 minutes after any import. #}
+        {% set capping = previous == 'Fill late' %}
         {% set last_import = as_datetime(states('sensor.last_grid_import')) %}
         {% set import_quiet = is_state('binary_sensor.grid_importing', 'off')
              and (last_import is none or (now() - last_import).total_seconds() > 600) %}
@@ -78,13 +80,25 @@
              and states('sensor.solar_spare_today_p10') | float(0) >= (1.5 if capping else 3)
              and soc >= (47 if capping else 50) %}
 
-        {%- if grid_charge -%}Charge from Solar Power and Grid
-        {%- elif is_state('binary_sensor.house_battery_hold', 'on') -%}Charge from Solar Power
-        {%- elif fill_late -%}Charge from Clipped Solar Power
-        {%- else -%}Maximize Self Consumption
+        {# Car lock: while the car may be solar-charging, the battery only smooths
+           its supply when it has energy to spare: at least 90% (92% to unlock
+           once locked), or the forecast says it will fill anyway
+           (binary_sensor.ev_car_first). Otherwise it doesn't discharge, so a
+           shortfall shows as grid import, which the car controller sees at
+           once rather than through the Tesla's 10-minute-old data. #}
+        {% set car_lock = is_state('binary_sensor.ev_may_be_charging', 'on')
+             and is_state('binary_sensor.ev_off_peak_charging_window', 'off')
+             and is_state('binary_sensor.ev_car_first', 'off')
+             and soc < (92 if previous == 'Car lock' else 90) %}
+
+        {%- if grid_charge -%}Grid top-up
+        {%- elif is_state('binary_sensor.house_battery_hold', 'on') -%}Hold
+        {%- elif car_lock -%}Car lock
+        {%- elif fill_late -%}Fill late
+        {%- else -%}Normal
         {%- endif -%}
       attributes:
-        # Grid charge rate, used in "Charge from Solar Power and Grid": finish about
+        # Grid charge rate, used in Grid top-up: finish about
         # an hour before 05:30. 500-2500 W, gentle on the battery and leaves supply
         # headroom for the car. Rounded to 250 W so small changes don't rewrite the
         # inverter.

@@ -43,6 +43,11 @@ ev_charge_reconcile:
         tesla_available: >
           {{ has_value('sensor.tesla_model_3_charging')
              and has_value('number.tesla_model_3_charge_current') }}
+        # Tesla data refreshes only every 10 minutes, so after a stop give it two
+        # refreshes before starting again; otherwise it cycles on and off.
+        recently_stopped: >
+          {{ is_state('switch.tesla_model_3_charge', 'off')
+             and (now() - states.switch.tesla_model_3_charge.last_changed).total_seconds() < 1200 }}
         battery_available: >
           {{ has_value('sensor.solaredge_battery1_state_of_charge')
              and has_value('number.solaredge_multi_i1_backup_reserve') }}
@@ -115,6 +120,16 @@ ev_charge_reconcile:
 
         - conditions: "{{ target_reached or not plugged_in or scheduled }}"
           sequence:
+            # Leave the car at 5 A after a full charge, so the next plug-in during
+            # peak hours starts gently (the car charges as soon as it is plugged
+            # in, up to 10 minutes before Home Assistant sees it).
+            - if: "{{ target_reached and plugged_in and current_amps > 5 }}"
+              then:
+                - service: number.set_value
+                  target:
+                    entity_id: number.tesla_model_3_charge_current
+                  data:
+                    value: 5
             - stop: Tesla is unavailable for automatic charging.
 
         - conditions: "{{ grid_charging }}"
@@ -144,6 +159,12 @@ ev_charge_reconcile:
                         - service: switch.turn_off
                           target:
                             entity_id: switch.tesla_model_3_charge
+                        # Start gently if it's plugged in again later.
+                        - service: number.set_value
+                          target:
+                            entity_id: number.tesla_model_3_charge_current
+                          data:
+                            value: 5
                   default:
                     - variables:
                         target_amps: "{{ [solar_amps, 16] | min }}"
@@ -169,7 +190,7 @@ ev_charge_reconcile:
               target:
                 entity_id: switch.tesla_model_3_charge
 
-        - conditions: "{{ solar_update and solar_amps >= 5 }}"
+        - conditions: "{{ solar_update and solar_amps >= 5 and not recently_stopped }}"
           sequence:
             - variables:
                 target_amps: "{{ [solar_amps, 16] | min }}"

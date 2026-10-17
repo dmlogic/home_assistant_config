@@ -104,11 +104,20 @@ daytime rules:
 - Tesla current is calculated from available solar power and constrained to
   5-16 A, whatever the house battery's state of charge.
 - Below Tesla's 5 A minimum available capacity, the controller stops charging
-  to avoid unintended import or home-battery discharge.
+  to avoid unintended import or home-battery discharge, and sets the current
+  to 5 A.
+- After a stop, it waits 20 minutes before starting again. Tesla data
+  refreshes only every 10 minutes, and acting on old data made the car cycle
+  on and off.
+- After a full charge, the current is set to 5 A. The car charges as soon as
+  it is plugged in, up to 10 minutes before Home Assistant sees it, so that
+  start is gentle (1.15 kW, not 7.4 kW).
 
 Solar headroom is calculated for every sample as net grid export, plus current
-Tesla charging power, plus house battery charging power when the car comes
-first, minus home-battery discharge and a 250 W safety margin. Tesla charging
+Tesla charging power (only while its charge switch is on, so stale power after
+a stop doesn't count), plus house battery charging power when the car comes
+first (not while filling late), minus home-battery discharge and a 250 W
+safety margin. Tesla charging
 power is charger voltage x current, because the Tesla power sensor reports
 whole kW.
 Grid import and battery discharge are subtracted, so neither can be treated as
@@ -137,9 +146,14 @@ otherwise run down before the morning. See [battery-mode.md](battery-mode.md)
 for the plan and the inverter modes.
 
 In SolarEdge Remote Control (normal), `automation.battery_mode_controller`
-applies the hold as the inverter command "Charge from Solar Power": the battery
-does not discharge, and solar can still charge it. This controller then keeps
-the backup reserve at 0%.
+applies the hold as Maximize Self Consumption with a 0 W discharge limit: the
+battery does not discharge, solar serves the house first, and any surplus
+still charges the battery. This controller then keeps the backup reserve at 0%.
+
+During peak-hour solar charging, the battery may smooth the car's supply only
+when it has energy to spare (at least 90%, or the car comes first). Otherwise
+the battery mode is Car lock, applied the same way as a hold. See
+[battery-mode.md](battery-mode.md).
 
 If the storage control mode is anything else (for example after a change in
 the SolarEdge app), the controller falls back to the backup reserve: it sets
@@ -181,6 +195,7 @@ The controller is implemented by:
 - 10-minute solar headroom average: `sensor.ev_solar_headroom_10_minute_average`
 - Available solar calculation: `sensor.ev_available_solar_power`
 - Off-peak window: `binary_sensor.ev_off_peak_charging_window`
+- Car may be drawing power: `binary_sensor.ev_may_be_charging`
 - Car first or battery first: `binary_sensor.ev_car_first`
 - Solcast p10 remaining today: `sensor.solar_remaining_today_p10`
 - Storage mode check: `automation.solaredge_storage_mode_check`

@@ -2,36 +2,61 @@
 
 Home Assistant steers the SolarEdge battery with Remote Control commands. The
 inverter's storage control mode is `Remote Control` with default mode
-`Maximize Self Consumption`. Every command times out after an hour and the
-inverter falls back to the default, so if Home Assistant stops, the battery
-carries on as normal.
+`Maximize Self Consumption`. Commands time out and the inverter falls back to
+the default. If Home Assistant stops, the battery carries on as normal, except
+during a hold: the 0 W discharge limit also applies to the default mode, so the
+battery stays held (extra grid import, never a drained battery) until Home
+Assistant returns.
 
 `sensor.battery_mode` (`templates/battery_mode.yaml`) says which mode the
-battery should be in. `automation.battery_mode_controller` sends it to the
-inverter when the command read back from the inverter differs. That covers mode
-changes and hourly timeouts. Registers are written only when they differ, and
-each change is logged to the logbook as "Battery mode".
+battery should be in: Grid top-up, Hold, Car lock, Fill late or Normal.
+`automation.battery_mode_controller` turns that into an inverter command and
+charge/discharge limits:
+
+| Mode | Command | Limits | Timeout |
+|---|---|---|---|
+| Grid top-up | Charge from Solar Power and Grid | charge = `grid_charge_rate` | 1 h |
+| Hold, Car lock | Maximize Self Consumption | discharge 0 W | 7 h |
+| Fill late | Charge from Clipped Solar Power | | 1 h |
+| Normal | Maximize Self Consumption | | |
+
+Grid top-up and Fill late are sent again when the command read back from the
+inverter differs, which covers hourly timeouts. Hold and Car lock use the same
+command as Normal, so the read-back can't show them expiring. They are sent on
+entry (and whenever the timeout read back isn't 7 hours) and renewed hourly.
+They end when Normal restores the discharge limit. Registers are written only
+when they differ, and each mode change is logged to the logbook as "Battery
+mode".
+
+Don't use "Charge from Solar Power" for a hold. It sends solar to the battery
+before the house: on 2026-10-17 the battery took 3.7 kW while the house and car
+imported 4 kW.
 
 ## Modes
 
-In priority order:
-
 Nothing here is seasonal: each mode follows the forecast and the tariff, so
 grid top-ups happen mostly on winter nights and filling late mostly on long
-days, without any date rules.
+days, without any date rules. In priority order:
 
-1. **Charge from Solar Power and Grid** (grid top-up). Between 23:30 and
+1. **Grid top-up**. Between 23:30 and
    05:30, during off-peak, when the state of charge is more than 2 points below
    the 23:00 plan's target, that is, when tomorrow's forecast won't cover the
    morning and evening. It continues until the target is reached. The rate
    (`grid_charge_rate` attribute) is set to finish about 04:30, between 500 and
    2500 W. That is gentle on the battery and leaves supply headroom while the
    car charges.
-2. **Charge from Solar Power** (hold). When `binary_sensor.house_battery_hold`
-   is on: the car is charging from the grid, or the overnight plan says hold.
-   The battery does not discharge; solar can still charge it. See
-   [ev-charging.md](ev-charging.md).
-3. **Charge from Clipped Solar Power** (fill late). When Solcast's
+2. **Hold**. When `binary_sensor.house_battery_hold` is on: the car is
+   charging from the grid, or the overnight plan says hold. The battery does
+   not discharge; solar serves the house first and any surplus still charges
+   the battery. See [ev-charging.md](ev-charging.md).
+3. **Car lock** (applied as Hold). While the car may be solar-charging
+   (`binary_sensor.ev_may_be_charging`) outside off-peak, unless the battery
+   has energy to spare: at least 90% (92% to unlock once locked), or
+   `binary_sensor.ev_car_first` is on. Otherwise the battery would cover the
+   car's shortfall while the Tesla's 10-minute-old data catches up. When it's
+   locked, a shortfall shows as grid import, which the car controller sees
+   within seconds.
+4. **Fill late**. When Solcast's
    pessimistic (p10) forecast for the rest of today covers filling the battery
    (allowing 5% loss), the house until sunset (0.6 kW) and a margin, the
    battery stops charging for now. That margin is
@@ -49,9 +74,9 @@ days, without any date rules.
    - the sun is up;
    - the state of charge is at least 50% to start (47% to continue), so there
      is stored energy to fall back on;
-   - the house is not importing, and hasn't for 10 minutes. These modes don't
+   - the house is not importing, and hasn't for 10 minutes. This mode doesn't
      discharge, so passing cloud would otherwise mean grid import.
-4. **Maximize Self Consumption**: normal.
+5. **Normal**.
 
 ## Overnight plan
 
@@ -80,6 +105,7 @@ charging. `automation.battery_overnight_plan_log` logs each plan's reason.
 
 - Desired mode: `sensor.battery_mode`
 - Hold: `binary_sensor.house_battery_hold`
+- Car may be drawing power: `binary_sensor.ev_may_be_charging`
 - Solcast p10 remaining today: `sensor.solar_remaining_today_p10` (attribute
   `above_6kw`)
 - Spare solar: `sensor.solar_spare_today_p10`
@@ -89,7 +115,8 @@ charging. `automation.battery_overnight_plan_log` logs each plan's reason.
 - Inverter: `select.solaredge_multi_i1_storage_control_mode`,
   `select.solaredge_multi_i1_storage_command_mode`,
   `number.solaredge_multi_i1_storage_command_timeout`,
-  `number.solaredge_multi_i1_storage_charge_limit`
+  `number.solaredge_multi_i1_storage_charge_limit`,
+  `number.solaredge_multi_i1_storage_discharge_limit`
 
 The Remote Control entities are unavailable unless the storage control mode is
 Remote Control.

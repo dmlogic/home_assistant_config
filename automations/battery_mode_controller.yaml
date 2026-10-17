@@ -2,9 +2,14 @@ alias: Battery mode controller
 description: >-
   Apply sensor.battery_mode to the SolarEdge inverter as a Remote Control command
   (templates/battery_mode.yaml). Commands time out after an hour and the inverter
-  falls back to its default, Maximize Self Consumption; when the command read back
-  from the inverter no longer matches, it is sent again. Registers are written
-  only when they differ.
+  falls back to its default, Maximize Self Consumption. When the command read back
+  from the inverter no longer matches, it is sent again. Hold and Car lock use the
+  same command as Normal with a 0 W discharge limit, so the read-back can't show
+  them expiring: they are sent on entry with a 7-hour timeout (longer than any
+  normal hold) and renewed hourly, and end when Normal restores the limit. The
+  discharge limit also applies after a command expires, so if Home Assistant
+  stops during a hold, the battery stays held (extra grid import, never a drained
+  battery) until it returns. Limits are written only when they differ.
 triggers:
   - trigger: state
     entity_id: sensor.battery_mode
@@ -18,8 +23,12 @@ triggers:
     for: "00:00:30"
   - trigger: time_pattern
     minutes: /15
+  - trigger: time_pattern
+    minutes: 0
+    id: renew
   - trigger: homeassistant
     event: start
+    id: start
 conditions:
   - condition: state
     entity_id: select.solaredge_multi_i1_storage_control_mode
@@ -29,45 +38,69 @@ conditions:
       {{ has_value('sensor.battery_mode')
          and has_value('select.solaredge_multi_i1_storage_command_mode')
          and has_value('number.solaredge_multi_i1_storage_command_timeout')
-         and has_value('number.solaredge_multi_i1_storage_charge_limit') }}
+         and has_value('number.solaredge_multi_i1_storage_charge_limit')
+         and has_value('number.solaredge_multi_i1_storage_discharge_limit') }}
 actions:
   - variables:
       mode: "{{ states('sensor.battery_mode') }}"
+      command: >
+        {{ {'Grid top-up': 'Charge from Solar Power and Grid',
+            'Fill late': 'Charge from Clipped Solar Power'}.get(mode, 'Maximize Self Consumption') }}
+      held: "{{ mode in ['Hold', 'Car lock'] }}"
+      # A gentle rate for a grid top-up; otherwise at least the battery's 5 kW.
       charge_limit: >
         {{ state_attr('sensor.battery_mode', 'grid_charge_rate') | int(500)
-           if mode == 'Charge from Solar Power and Grid' else 5000 }}
-      current_limit: "{{ states('number.solaredge_multi_i1_storage_charge_limit') | float(-1) }}"
-      current_mode: "{{ states('select.solaredge_multi_i1_storage_command_mode') }}"
-  # A gentle rate for grid charging; otherwise at least the battery's 5 kW.
+           if mode == 'Grid top-up' else 5000 }}
+      current_charge: "{{ states('number.solaredge_multi_i1_storage_charge_limit') | float(-1) }}"
+      current_discharge: "{{ states('number.solaredge_multi_i1_storage_discharge_limit') | float(-1) }}"
+      current_command: "{{ states('select.solaredge_multi_i1_storage_command_mode') }}"
+      current_timeout: "{{ states('number.solaredge_multi_i1_storage_command_timeout') | float(-1) }}"
+      changed: >
+        {{ trigger.platform == 'state' and trigger.entity_id == 'sensor.battery_mode'
+           and trigger.from_state is not none
+           and trigger.to_state.state != trigger.from_state.state }}
+      # A held mode is also sent when the timeout read back isn't its own, for
+      # example if the mode changed while this automation was off.
+      send: >
+        {{ current_command != command
+           or (held and (changed or current_timeout != 25200
+                         or trigger.id in ['renew', 'start'])) }}
   - if: >
-      {{ current_limit != charge_limit if mode == 'Charge from Solar Power and Grid'
-         else current_limit < 5000 }}
+      {{ current_charge != charge_limit if mode == 'Grid top-up'
+         else current_charge < 5000 }}
     then:
       - action: number.set_value
         target:
           entity_id: number.solaredge_multi_i1_storage_charge_limit
         data:
           value: "{{ charge_limit }}"
-  - if: "{{ current_mode != mode }}"
+  - if: "{{ current_discharge != 0 if held else current_discharge < 5000 }}"
     then:
-      - if: "{{ states('number.solaredge_multi_i1_storage_command_timeout') | float(0) != 3600 }}"
-        then:
-          - action: number.set_value
-            target:
-              entity_id: number.solaredge_multi_i1_storage_command_timeout
-            data:
-              value: 3600
+      - action: number.set_value
+        target:
+          entity_id: number.solaredge_multi_i1_storage_discharge_limit
+        data:
+          value: "{{ 0 if held else 5000 }}"
+  - if: "{{ send }}"
+    then:
+      - action: number.set_value
+        target:
+          entity_id: number.solaredge_multi_i1_storage_command_timeout
+        data:
+          value: "{{ 25200 if held else 3600 }}"
       - action: select.select_option
         target:
           entity_id: select.solaredge_multi_i1_storage_command_mode
         data:
-          option: "{{ mode }}"
+          option: "{{ command }}"
+  - if: "{{ changed }}"
+    then:
       - action: logbook.log
         data:
           name: Battery mode
           entity_id: sensor.battery_mode
           message: >-
-            {{ current_mode }} -> {{ mode }}{{ ' at ' ~ charge_limit ~ ' W'
-            if mode == 'Charge from Solar Power and Grid' else '' }}
+            {{ trigger.from_state.state }} -> {{ mode }}{{ ' at ' ~ charge_limit ~ ' W'
+            if mode == 'Grid top-up' else '' }}
 mode: queued
 max: 3
