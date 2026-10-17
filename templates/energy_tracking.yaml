@@ -11,6 +11,23 @@
     state: "{{ [0 - states('sensor.solaredge_multi_i1_m1_ac_power') | float(0), 0] | max | round(0) }}"
     availability: "{{ has_value('sensor.solaredge_multi_i1_m1_ac_power') }}"
 
+  # Solar generation: inverter AC output plus battery charging (or minus battery
+  # discharging; the battery is DC-coupled). Zero at night, when the sum is only
+  # conversion losses and sampling noise. Integrated into sensor.solar_pv_energy
+  # for the daily solar meter.
+  - name: Solar PV Power
+    unique_id: solar_pv_power
+    device_class: power
+    state_class: measurement
+    unit_of_measurement: W
+    state: >
+      {{ ([states('sensor.solaredge_multi_i1_ac_power') | float(0)
+           + states('sensor.solaredge_multi_i1_b1_dc_power') | float(0), 0] | max | round(0))
+         if is_state('sun.sun', 'above_horizon') else 0 }}
+    availability: >
+      {{ has_value('sensor.solaredge_multi_i1_ac_power')
+         and has_value('sensor.solaredge_multi_i1_b1_dc_power') }}
+
   # Tesla charger_power is reported in whole kW, so use voltage x current instead.
   # Only charging at home counts.
   - name: EV Home Charging Power
@@ -181,3 +198,4 @@
       state: >
         {% set forecast = states('sensor.solcast_forecast_today_morning') | float(0) %}
         {{ (states('sensor.solar_generation_daily') | float(0) / forecast) | round(2) if forecast > 0.5 else none }}
+

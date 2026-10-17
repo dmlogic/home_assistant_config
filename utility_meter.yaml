@@ -5,7 +5,7 @@ grid_export_daily:
   source: sensor.solaredge_m1_exported_kwh
   cycle: daily
 solar_generation_daily:
-  source: sensor.energy_solar_generation
+  source: sensor.solar_pv_energy
   cycle: daily
 battery_charged_daily:
   source: sensor.energy_battery_charged

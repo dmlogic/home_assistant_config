@@ -4,10 +4,11 @@
 # over) and evening (when the sun fades until 23:30). Daytime solar beyond the
 # house load refills it.
 #
-# hold: the battery would otherwise run down overnight (at off-peak rates) and
-# leave the morning short, so hold it through the off-peak window and let the
-# house run on cheap grid power. When the battery comfortably lasts the night,
-# it is not held, keeping off-grid nights.
+# hold: the battery would otherwise run down overnight (at off-peak rates)
+# below the target, so hold it through the off-peak window and let the house
+# run on cheap grid power. This also stops a grid top-up being run down again
+# before 05:30. When the battery comfortably lasts the night, it is not held,
+# keeping off-grid nights.
 #
 # target: state of charge needed at 05:30 to cover the morning and, after
 # tomorrow's solar surplus, the evening. The battery charges from the grid to
@@ -35,7 +36,7 @@
               + state_attr('sensor.solcast_pv_forecast_forecast_tomorrow', 'estimate') | float(0)) / 2) | round(1) }}
         surplus: "{{ ([solar - daytime_load, 0] | max * 0.95) | round(1) }}"
         target_kwh: "{{ [[morning_load, morning_load + evening_load - surplus] | max, capacity] | min }}"
-        hold: "{{ stored - overnight_load < morning_load }}"
+        hold: "{{ stored - overnight_load < target_kwh }}"
   sensor:
     - name: Battery Overnight Plan
       unique_id: battery_overnight_plan
@@ -49,7 +50,7 @@
         solar_surplus: "{{ surplus }}"
         reason: >-
           {%- if hold -%}
-            Battery {{ soc | round(0) }}% would run down overnight; hold it 23:30-05:30.
+            Battery {{ soc | round(0) }}% would run down below the target overnight; hold it 23:30-05:30.
           {%- else -%}
             Battery {{ soc | round(0) }}% lasts the night; no hold.
           {%- endif %}

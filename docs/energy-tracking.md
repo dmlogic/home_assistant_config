@@ -49,3 +49,12 @@ conservative. House battery discharge counts as solar.
 `utility_meter.yaml` defines `sensor.grid_import_daily`,
 `sensor.grid_export_daily`, `sensor.solar_generation_daily`,
 `sensor.battery_charged_daily` and `sensor.battery_discharged_daily`.
+
+`sensor.solar_generation_daily` counts `sensor.solar_pv_energy`, the integral
+of `sensor.solar_pv_power` (inverter AC output plus battery charging, or minus
+battery discharging; zero at night). Until 2026-10-17 it counted
+`sensor.energy_solar_generation`, which is combined from several meters that
+update at different moments and so jitters by a few Wh. The utility meter
+counted every rise and ignored every fall, over-counting by 7-9 kWh a day. The
+forecast ratios and self-sufficiency before then are too high. The Energy
+dashboard's solar statistics were not affected.

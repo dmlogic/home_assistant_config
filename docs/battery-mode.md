@@ -46,6 +46,7 @@ days, without any date rules.
    applies only while:
    - the margin is at least 3 kWh to start (1.5 kWh to continue, the same as
      `binary_sensor.ev_car_first`);
+   - the sun is up;
    - the state of charge is at least 50% to start (47% to continue), so there
      is stored energy to fall back on;
    - the house is not importing, and hasn't for 10 minutes. These modes don't
@@ -61,7 +62,8 @@ tomorrow's forecast solar surplus (midway between Solcast p10 and p50, less
 5.5 kWh daytime house load). It is at least the morning load.
 
 `hold` is true when stored energy minus 2.0 kWh overnight load is below the
-morning load. During the off-peak tariff window, the battery is then held so
+target. That includes nights with a grid top-up, so the top-up isn't run down
+again before 05:30. During the off-peak tariff window, the battery is then held so
 the house runs on cheap grid power. When the battery comfortably lasts the
 night, it is not held, keeping off-grid nights. Plans older than 12 hours are
 ignored. House loads are 75th percentiles from a year of history, excluding EV

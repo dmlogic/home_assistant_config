@@ -69,10 +69,12 @@
       {% set total = states('sensor.solar_remaining_today_p10') | float(0) %}
       {% set above = state_attr('sensor.solar_remaining_today_p10', 'above_6kw') | float(0) %}
       {% set usable = total - above + [above, gap] | min %}
+      {# House load until today's sunset; before sunrise this includes the rest
+         of the night. After sunset, next_setting is tomorrow's: none left. #}
       {% set sunset = as_datetime(state_attr('sun.sun', 'next_setting')) %}
-      {% set daylight_hours = (sunset - now()).total_seconds() / 3600
-           if is_state('sun.sun', 'above_horizon') and sunset is not none else 0 %}
-      {{ (usable - gap - daylight_hours * 0.6) | round(2) }}
+      {% set hours = (sunset - now()).total_seconds() / 3600
+           if sunset is not none and as_local(sunset).date() == now().date() else 0 %}
+      {{ (usable - gap - hours * 0.6) | round(2) }}
     availability: >
       {{ has_value('sensor.solar_remaining_today_p10')
          and has_value('sensor.solaredge_battery1_state_of_charge') }}

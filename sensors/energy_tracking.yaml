@@ -14,3 +14,14 @@
   method: left
   unit_prefix: k
   round: 3
+- platform: integration
+  # Solar generation for the daily solar meter. sensor.energy_solar_generation
+  # combines several meters that update at different moments, so it jitters by
+  # a few Wh; a utility meter counts every rise and ignores every fall, which
+  # over-counted by 7-9 kWh a day.
+  name: Solar PV Energy
+  unique_id: solar_pv_energy
+  source: sensor.solar_pv_power
+  method: left
+  unit_prefix: k
+  round: 3

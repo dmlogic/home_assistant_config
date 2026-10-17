@@ -65,14 +65,16 @@
         {# Fill late: the pessimistic (p10) forecast covers filling the battery,
            the house until sunset and a margin (sensor.solar_spare_today_p10):
            3 kWh to start, 1.5 kWh to continue (as binary_sensor.ev_car_first).
-           Only above 50%, so there is stored energy to fall back on. These
+           Only in daylight and above 50%, so there is stored energy to fall
+           back on. These
            modes don't discharge, so leave when the house imports and wait 10
            minutes after any import. #}
         {% set capping = previous == 'Charge from Clipped Solar Power' %}
         {% set last_import = as_datetime(states('sensor.last_grid_import')) %}
         {% set import_quiet = is_state('binary_sensor.grid_importing', 'off')
              and (last_import is none or (now() - last_import).total_seconds() > 600) %}
-        {% set fill_late = import_quiet and has_value('sensor.solar_spare_today_p10')
+        {% set fill_late = is_state('sun.sun', 'above_horizon') and import_quiet
+             and has_value('sensor.solar_spare_today_p10')
              and states('sensor.solar_spare_today_p10') | float(0) >= (1.5 if capping else 3)
              and soc >= (47 if capping else 50) %}
 
