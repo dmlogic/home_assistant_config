@@ -1,0 +1,19 @@
+alias: Dining room S2 double-click toggles plug socket 2
+description: "Second switch on the Dining room dimmer (node 8, S2) sends scene 24 on double-click. Single click and hold drive the Lounge light directly via association."
+trigger:
+  - platform: event
+    event_type: zwave_js_value_notification
+    event_data:
+      node_id: 8
+      command_class: 43
+      value: 24
+condition: []
+action:
+  - action: switch.toggle
+    target:
+      entity_id: switch.plug_socket_2_2
+  # The scene report can arrive twice in quick succession; hold the run open to swallow the duplicate
+  - delay:
+      seconds: 1
+mode: single
+max_exceeded: silent
