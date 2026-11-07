@@ -100,12 +100,17 @@
       attributes:
         # Grid charge rate, used in Grid top-up: finish about
         # an hour before 05:30. 500-2500 W, gentle on the battery and leaves supply
-        # headroom for the car. Rounded to 250 W so small changes don't rewrite the
-        # inverter.
+        # headroom for the car. Rounded to 250 W. During a top-up the rate already
+        # sent is kept unless the new one differs by 500 W or more: otherwise the
+        # SoC reading jitters it across a 250 W step and every change is an
+        # inverter write (11-60 a night before, 2-5 with this; same finish time).
         grid_charge_rate: >
           {% set soc = states('sensor.solaredge_battery1_state_of_charge') | float(0) %}
           {% set capacity = states('sensor.solaredge_multi_i1_b1_available_energy') | float(8.7) %}
           {% set needed = capacity * ([states('sensor.battery_overnight_plan') | float(0) - soc, 0] | max) / 100 %}
           {% set finish = today_at('04:30') if now().hour < 12 else today_at('04:30') + timedelta(days=1) %}
           {% set hours = [(finish - now()).total_seconds() / 3600, 0.5] | max %}
-          {{ ([[needed / hours * 1000 / 250, 2] | max, 10] | min | round(0) * 250) | int }}
+          {% set rate = ([[needed / hours * 1000 / 250, 2] | max, 10] | min | round(0) * 250) | int %}
+          {% set previous = this.attributes.get('grid_charge_rate') | int(-1)
+               if this.state == 'Grid top-up' else -1 %}
+          {{ previous if previous >= 0 and (rate - previous) | abs < 500 else rate }}
