@@ -28,6 +28,16 @@ They end when Normal restores the discharge limit. Registers are written only
 when they differ, and each mode change is logged to the logbook as "Battery
 mode".
 
+The controller checks every 5 minutes as well as on each change. A write that
+reports a Modbus error usually lands anyway (SolarEdge Modbus Multi v3 polls and
+writes on one connection), so the run carries on and the next check re-sends
+anything that didn't. The order is deliberate. A top-up's gentle charge limit
+goes before its command, so it never starts at 5 kW. After a top-up, the limit
+goes back to 5 kW only once the inverter reads back that it has left grid
+charging. Before 2026-11-08, one error could stop a run and leave the inverter
+grid-charging at 5 kW, or the battery discharging into the car, for up to 15
+minutes.
+
 Don't use "Charge from Solar Power" for a hold. It sends solar to the battery
 before the house: on 2026-10-17 the battery took 3.7 kW while the house and car
 imported 4 kW.
@@ -44,7 +54,9 @@ days, without any date rules. In priority order:
    morning and evening. It continues until the target is reached. The rate
    (`grid_charge_rate` attribute) is set to finish about 04:30, between 500 and
    2500 W. That is gentle on the battery and leaves supply headroom while the
-   car charges.
+   car charges. During a top-up the rate sent is kept until the new one differs
+   by 500 W or more, so a jittery SoC reading doesn't cause an inverter write
+   every few minutes.
 2. **Hold**. When `binary_sensor.house_battery_hold` is on: the car is
    charging from the grid, or the overnight plan says hold. The battery does
    not discharge; solar serves the house first and any surplus still charges

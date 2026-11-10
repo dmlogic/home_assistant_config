@@ -9,7 +9,12 @@ description: >-
   normal hold) and renewed hourly, and end when Normal restores the limit. The
   discharge limit also applies after a command expires, so if Home Assistant
   stops during a hold, the battery stays held (extra grid import, never a drained
-  battery) until it returns. Limits are written only when they differ.
+  battery) until it returns. Limits are written only when they differ. A write
+  that reports an error usually lands anyway, so the run carries on and the
+  5-minute check re-sends anything that didn't. Order matters: a top-up's gentle
+  charge limit goes before its command, and after a top-up the limit is raised
+  back to 5 kW only once the inverter reads back that it has left grid charging,
+  so a failed write can never leave it charging from the grid at 5 kW.
 triggers:
   - trigger: state
     entity_id: sensor.battery_mode
@@ -22,7 +27,7 @@ triggers:
       - select.solaredge_multi_i1_storage_control_mode
     for: "00:00:30"
   - trigger: time_pattern
-    minutes: /15
+    minutes: /5
   - trigger: time_pattern
     minutes: 0
     id: renew
@@ -65,11 +70,11 @@ actions:
         {{ current_command != command
            or (held and (changed or current_timeout != 25200
                          or trigger.id in ['renew', 'start'])) }}
-  - if: >
-      {{ current_charge != charge_limit if mode == 'Grid top-up'
-         else current_charge < 5000 }}
+  # Grid top-up: its gentle limit before the command, so it never starts at 5 kW.
+  - if: "{{ mode == 'Grid top-up' and current_charge != charge_limit }}"
     then:
       - action: number.set_value
+        continue_on_error: true
         target:
           entity_id: number.solaredge_multi_i1_storage_charge_limit
         data:
@@ -77,6 +82,7 @@ actions:
   - if: "{{ current_discharge != 0 if held else current_discharge < 5000 }}"
     then:
       - action: number.set_value
+        continue_on_error: true
         target:
           entity_id: number.solaredge_multi_i1_storage_discharge_limit
         data:
@@ -84,15 +90,31 @@ actions:
   - if: "{{ send }}"
     then:
       - action: number.set_value
+        continue_on_error: true
         target:
           entity_id: number.solaredge_multi_i1_storage_command_timeout
         data:
           value: "{{ 25200 if held else 3600 }}"
       - action: select.select_option
+        continue_on_error: true
         target:
           entity_id: select.solaredge_multi_i1_storage_command_mode
         data:
           option: "{{ command }}"
+  # Other modes: back to at least 5 kW, but only once the command read back at
+  # the start of the run is no longer grid charging. Leaving a top-up, the
+  # command change re-triggers this run (state trigger, after 30 s), or the
+  # 5-minute check does.
+  - if: >
+      {{ mode != 'Grid top-up' and current_charge < 5000
+         and current_command != 'Charge from Solar Power and Grid' }}
+    then:
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.solaredge_multi_i1_storage_charge_limit
+        data:
+          value: 5000
   - if: "{{ changed }}"
     then:
       - action: logbook.log
