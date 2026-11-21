@@ -166,6 +166,26 @@ backup reserve is stored in inverter flash memory, so it is written only when
 it must change. `automation.solaredge_storage_mode_check` raises a
 notification if the mode is not Remote Control for 5 minutes.
 
+## Waking the car for off-peak
+
+After a Home Assistant restart, Tesla Fleet has no car data until the car next
+wakes by itself. All the Tesla entities, including the location, stay
+`unknown`, so the controller can't start an off-peak charge. A car left
+plugged in after a solar stop doesn't restart by itself either.
+
+`automation.ev_wake_for_off_peak` covers this. When the off-peak window opens,
+or Home Assistant starts during off-peak, and `sensor.tesla_model_3_charging`
+has no value, it:
+
+1. presses `button.tesla_model_3_wake` (at startup, it first waits 2 minutes
+   for Tesla Fleet to load);
+2. after a minute, refreshes the car's data with `homeassistant.update_entity`;
+3. waits up to 20 minutes for the data. Once it arrives, the controller runs
+   as normal.
+
+If there is still no data, it sends a phone notification. When the car's data
+is present (the normal case), it does nothing.
+
 ## Control precedence
 
 The backup reserve is set first, as described above. Each controller run then
@@ -199,6 +219,7 @@ The controller is implemented by:
 - Car first or battery first: `binary_sensor.ev_car_first`
 - Solcast p10 remaining today: `sensor.solar_remaining_today_p10`
 - Storage mode check: `automation.solaredge_storage_mode_check`
+- Off-peak wake: `automation.ev_wake_for_off_peak`
 - House battery hold: `binary_sensor.house_battery_hold`
   (`templates/battery_mode.yaml`), applied by
   `automation.battery_mode_controller`

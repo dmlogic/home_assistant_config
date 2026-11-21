@@ -1,0 +1,72 @@
+alias: EV wake for off-peak
+description: >-
+  After a Home Assistant restart, Tesla Fleet has no car data until the car next
+  wakes by itself. Until then the EV charging controller can't see the car at
+  home and can't start an off-peak charge. When off-peak starts (or Home
+  Assistant starts during off-peak) with no car data, wake the car once and
+  refresh its data. If there is still no data after 20 minutes, notify.
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.ev_off_peak_charging_window
+    to: "on"
+    id: off_peak
+  - trigger: homeassistant
+    event: start
+    id: startup
+conditions:
+  - condition: state
+    entity_id: binary_sensor.ev_off_peak_charging_window
+    state: "on"
+  - condition: template
+    value_template: "{{ not has_value('sensor.tesla_model_3_charging') }}"
+actions:
+  # At startup, give Tesla Fleet time to load: if the car is awake, its first
+  # refresh fills in the data and there's nothing to do.
+  - if: "{{ trigger.id == 'startup' }}"
+    then:
+      - delay: "00:02:00"
+      - condition: template
+        value_template: >
+          {{ is_state('binary_sensor.ev_off_peak_charging_window', 'on')
+             and not has_value('sensor.tesla_model_3_charging') }}
+  - service: logbook.log
+    data:
+      name: EV wake for off-peak
+      message: "no Tesla data at off-peak, waking the car"
+  # The press reports an error if the car isn't online within ~30 s, but it may
+  # still wake after that, so carry on and refresh anyway.
+  - service: button.press
+    target:
+      entity_id: button.tesla_model_3_wake
+    continue_on_error: true
+  - delay: "00:01:00"
+  # Tesla Fleet doesn't refresh after a wake; this requests the refresh now
+  # rather than at the next 10-minute poll.
+  - service: homeassistant.update_entity
+    target:
+      entity_id: sensor.tesla_model_3_charging
+    continue_on_error: true
+  # When the data arrives, sensor.tesla_model_3_charging changes state and
+  # that triggers automation.ev_charging_controller in the normal way.
+  - wait_template: "{{ has_value('sensor.tesla_model_3_charging') }}"
+    timeout: "00:20:00"
+    continue_on_timeout: true
+  - if: "{{ not wait.completed }}"
+    then:
+      - service: logbook.log
+        data:
+          name: EV wake for off-peak
+          message: "still no Tesla data after 20 minutes"
+      - service: notify.mobile_app_sm_s921b
+        data:
+          title: Car may not charge tonight
+          message: >-
+            Home Assistant has no data from the Tesla and waking it didn't work.
+            Check the Tesla app and start the charge there if needed.
+    else:
+      - service: logbook.log
+        data:
+          name: EV wake for off-peak
+          message: "Tesla data is back ({{ states('sensor.tesla_model_3_charging') }})"
+mode: single
+max_exceeded: silent
